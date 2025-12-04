@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BookOpen, Heart, ListChecks, Users, LogOut } from 'lucide-react';
+import { BookOpen, Heart, ListChecks, Users, LogOut, LucideIcon } from 'lucide-react';
 import { TabType, UserProfile } from '../types';
 
 interface NavigationProps {
@@ -11,11 +11,11 @@ interface NavigationProps {
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange, user, onLogout }) => {
-  const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'bible', label: 'Bíblia', icon: <BookOpen size={22} strokeWidth={2.5} /> },
-    { id: 'devotionals', label: 'Grupos', icon: <Users size={22} strokeWidth={2.5} /> },
-    { id: 'prayer', label: 'Oração', icon: <Heart size={22} strokeWidth={2.5} /> },
-    { id: 'routine', label: 'Rotina', icon: <ListChecks size={22} strokeWidth={2.5} /> },
+  const tabs: { id: TabType; label: string; Icon: LucideIcon }[] = [
+    { id: 'bible', label: 'Bíblia', Icon: BookOpen },
+    { id: 'devotionals', label: 'Grupos', Icon: Users },
+    { id: 'prayer', label: 'Oração', Icon: Heart },
+    { id: 'routine', label: 'Rotina', Icon: ListChecks },
   ];
 
   return (
@@ -38,7 +38,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange,
                       : 'text-slate-400 group-hover:text-navy-600'
                   }`}
                 >
-                  {tab.icon}
+                  <tab.Icon size={22} strokeWidth={2.5} />
                   {isActive && (
                       <span className="absolute bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 bg-navy-900 rounded-full animate-in zoom-in"></span>
                   )}
@@ -84,7 +84,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange,
                         }`}
                      >
                         <div className={`${isActive ? 'text-gold-500' : 'text-slate-400 group-hover:text-navy-600'} transition-colors`}>
-                            {React.cloneElement(tab.icon as React.ReactElement<any>, { size: 24 })}
+                            <tab.Icon size={24} />
                         </div>
                         <span className={`font-bold text-sm ${isActive ? 'text-navy-900' : ''}`}>
                             {tab.label}

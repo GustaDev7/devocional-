@@ -109,7 +109,7 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-navy-900 flex flex-col items-center justify-center">
+      <div className="h-[100dvh] bg-navy-900 flex flex-col items-center justify-center">
         <div className="relative mb-4">
              <div className="absolute inset-0 bg-gold-400 rounded-full blur-xl opacity-20 animate-pulse"></div>
              <div className="w-16 h-16 bg-navy-800 rounded-2xl flex items-center justify-center relative z-10 border border-navy-700 shadow-xl">
@@ -124,7 +124,7 @@ const App: React.FC = () => {
   // Auth Screen
   if (!user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center relative font-sans overflow-hidden bg-navy-900">
+      <div className="h-[100dvh] flex flex-col items-center justify-center relative font-sans overflow-hidden bg-navy-900">
         {/* Animated Background */}
         <div className="absolute inset-0 z-0">
              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-navy-800 via-navy-900 to-navy-950"></div>
@@ -132,7 +132,7 @@ const App: React.FC = () => {
              <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-gold-500/10 rounded-full blur-[120px] pointer-events-none"></div>
         </div>
 
-        <div className="w-full max-w-[420px] px-6 animate-in fade-in zoom-in duration-700 relative z-10">
+        <div className="w-full max-w-[420px] px-6 animate-in fade-in zoom-in duration-700 relative z-10 overflow-y-auto max-h-screen py-8 no-scrollbar">
             <div className="text-center mb-10">
                 <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-navy-800 to-navy-900 rounded-[2rem] ring-1 ring-white/10 mb-6 shadow-2xl shadow-black/40 relative group transition-transform hover:scale-105 duration-500">
                     <div className="absolute inset-0 bg-gold-400 rounded-[2rem] blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-500"></div>
@@ -295,7 +295,7 @@ const App: React.FC = () => {
 
   // Main App Layout (Responsive)
   return (
-    <div className="h-screen w-full bg-slate-50 flex overflow-hidden">
+    <div className="h-[100dvh] w-full bg-slate-50 flex overflow-hidden">
         {/* Navigation - Sidebar on Desktop (md+), Bottom Bar on Mobile */}
         <Navigation 
             currentTab={currentTab} 
