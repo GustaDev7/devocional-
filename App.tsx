@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './services/supabaseService';
 import { UserProfile, TabType } from './types';
@@ -109,11 +110,10 @@ const App: React.FC = () => {
             if (error) {
                 setAuthError(error.message || 'Erro ao criar conta. Tente outro email.');
             } else if (newUser) {
+                // SUCESSO NO CADASTRO: Loga imediatamente
                 setUser(newUser);
                 setProfileName(name);
-                if (!newUser.id) {
-                    setAuthSuccess("Conta criada! Verifique seu email para confirmar.");
-                }
+                // Não definimos authSuccess aqui pois o usuário já será redirecionado pelo estado 'user'
             }
         } else if (authMode === 'forgot') {
             if (!email) {
