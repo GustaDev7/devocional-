@@ -25,6 +25,46 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange,
 
   return (
     <>
+      {/* MOBILE: Top Header (Logo + Actions) */}
+      <header 
+        className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/90 dark:bg-navy-950/90 backdrop-blur-xl border-b border-slate-200 dark:border-navy-800 z-50 px-4 flex items-center justify-between transition-colors duration-300 animate-fade-in-up"
+      >
+          <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-navy-800 to-navy-900 dark:from-navy-700 dark:to-navy-800 rounded-lg flex items-center justify-center text-sm shadow-md" aria-hidden="true">
+                🕊️
+              </div>
+              <span className="font-serif font-bold text-navy-900 dark:text-white text-lg">Lumen</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+              <button
+                  onClick={toggleTheme}
+                  className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-colors active:scale-95"
+                  aria-label="Alternar Tema"
+              >
+                  {isDarkMode ? <Moon size={18} className="text-gold-400" /> : <Sun size={18} className="text-gold-500" />}
+              </button>
+              
+              {user && onEditProfile && (
+                  <button 
+                      onClick={onEditProfile}
+                      className="p-1 rounded-full border border-slate-200 dark:border-navy-700 active:scale-95 transition-transform"
+                      aria-label="Configurações"
+                  >
+                      <div className="w-7 h-7 rounded-full bg-navy-100 dark:bg-navy-800 overflow-hidden">
+                          {user.avatar_url ? (
+                              <img src={user.avatar_url} alt="Perfil" className="w-full h-full object-cover" />
+                          ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs font-bold text-navy-700 dark:text-navy-300">
+                                  {user.name?.charAt(0) || 'U'}
+                              </div>
+                          )}
+                      </div>
+                  </button>
+              )}
+          </div>
+      </header>
+
       {/* MOBILE: Bottom Navigation */}
       <nav 
         className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-navy-950/95 backdrop-blur-xl border-t border-slate-200 dark:border-navy-800 pb-safe z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] transition-colors duration-300"

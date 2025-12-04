@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './services/supabaseService';
 import { UserProfile, TabType } from './types';
@@ -177,33 +176,44 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="h-[100dvh] bg-navy-950 flex flex-col items-center justify-center relative overflow-hidden" aria-live="polite">
-        {/* Background Atmosphere */}
-        <div className="absolute inset-0 z-0">
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold-500/5 rounded-full blur-[120px] animate-pulse-subtle"></div>
+      <div className="h-[100dvh] bg-[#020617] relative overflow-hidden flex items-center justify-center font-sans" aria-live="polite">
+        {/* TECH GRID FLOOR (Horizon) */}
+        <div className="absolute inset-0 overflow-hidden opacity-30">
+            <div className="perspective-grid w-full h-[200%] absolute top-0 left-0 bg-transparent"></div>
+            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-[#020617] to-transparent z-10"></div>
         </div>
 
-        {/* Cinematic Animation Sequence */}
-        <div className="relative z-10 flex flex-col items-center">
-             {/* Logo Container */}
-             <div className="w-24 h-24 bg-gradient-to-br from-navy-800 to-navy-900 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-black/50 mb-8 ring-1 ring-white/10 relative overflow-hidden animate-[fadeInUp_1.5s_ease-out_0.5s_forwards] opacity-0 translate-y-4">
-                 <div className="absolute inset-0 bg-gold-400/20 blur-xl animate-pulse"></div>
-                 <span className="text-5xl relative z-10 animate-[zoomIn_2s_ease-out_0.5s_forwards]">🕊️</span>
-             </div>
-             
-             {/* Text Reveal */}
-             <h1 className="text-5xl font-serif font-bold text-white mb-3 tracking-tight opacity-0 animate-[fadeIn_1.5s_ease-out_1.5s_forwards]">Lumen</h1>
-             <p className="text-gold-200/80 text-xs font-bold tracking-[0.3em] uppercase opacity-0 animate-[fadeIn_1.5s_ease-out_2.5s_forwards]">Sua jornada de fé</p>
+        {/* BACKGROUND GLOW */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-blue-900/10 via-gold-900/10 to-blue-900/10 rounded-full blur-[80px] animate-pulse"></div>
+
+        {/* THE DIVINE CROSS CONSTRUCTION */}
+        <div className="relative z-20 w-64 h-64 flex items-center justify-center animate-cross-pulse">
+            
+            {/* Vertical Beam (Connects Heaven and Earth) */}
+            <div className="absolute w-2 h-32 bg-gradient-to-b from-transparent via-gold-400 to-transparent rounded-full animate-draw-vertical origin-top shadow-[0_0_20px_rgba(251,191,36,0.6)]"></div>
+            
+            {/* Horizontal Beam (Connects People) */}
+            <div className="absolute h-2 w-24 bg-gradient-to-r from-transparent via-gold-100 to-transparent rounded-full animate-draw-horizontal shadow-[0_0_20px_rgba(251,191,36,0.6)]"></div>
+
+            {/* Center Core Spark */}
+            <div className="absolute w-4 h-4 bg-white rounded-full blur-md animate-[ping_2s_infinite] opacity-80"></div>
+            <div className="absolute w-1 h-1 bg-white rounded-full shadow-[0_0_30px_rgba(255,255,255,1)] z-30"></div>
         </div>
-        
-        {/* Loading Dots */}
-        <div className="absolute bottom-16 opacity-0 animate-[fadeIn_1s_ease-out_3.5s_forwards]">
-             <div className="flex gap-2">
-                <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-1.5 h-1.5 bg-gold-500 rounded-full animate-bounce"></div>
-             </div>
+
+        {/* TEXT REVEAL */}
+        <div className="absolute bottom-28 z-20 text-center space-y-3">
+            <h1 className="text-5xl font-serif font-bold text-white tracking-tight animate-[fadeInUp_1s_ease-out_1.5s_forwards] opacity-0 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                Lumen
+            </h1>
+            <div className="h-px w-0 mx-auto bg-gradient-to-r from-transparent via-gold-500 to-transparent animate-[drawH_1s_ease-out_2s_forwards]" style={{ maxWidth: '100px' }}></div>
+            <p className="text-[10px] font-bold tracking-[0.5em] uppercase shimmer-text opacity-0 animate-[fadeIn_1s_ease-out_2.5s_forwards]">
+                Tech &bull; Faith &bull; Light
+            </p>
         </div>
+
+        {/* LOADING BAR */}
+        <div className="absolute bottom-0 left-0 h-0.5 bg-gold-600 shadow-[0_0_20px_#d97706] w-full origin-left animate-[gridMove_6s_linear_forwards]" style={{ animationName: 'widthGrow', animationDuration: '6s' }}></div>
+        <style>{`@keyframes widthGrow { 0% { width: 0%; } 100% { width: 100%; } }`}</style>
       </div>
     );
   }
@@ -392,7 +402,7 @@ const App: React.FC = () => {
             toggleTheme={toggleTheme}
         />
         
-        <main className="flex-1 h-full relative overflow-hidden flex flex-col">
+        <main className="flex-1 h-full relative overflow-hidden flex flex-col pt-14 md:pt-0">
             <div className="flex-1 h-full w-full overflow-hidden relative">
                 {currentTab === 'bible' && <BibleScreen />}
                 {currentTab === 'devotionals' && <DevotionalScreen user={user} />}

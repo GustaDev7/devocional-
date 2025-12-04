@@ -1,7 +1,5 @@
-
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { UserProfile, PrayerRequest, StudyGroup, ChatMessage, ReadingPlan } from '../types';
-import { MOCK_PRAYERS, MOCK_GROUPS, MOCK_MESSAGES } from './mockData';
 import { GoogleGenAI } from "@google/genai";
 
 // Credenciais fornecidas
@@ -12,10 +10,24 @@ class SupabaseService {
   private client: SupabaseClient;
   private isGuest: boolean = false;
   private genAI: GoogleGenAI;
+  private guestId: string | null = null;
+  private guestName: string | null = null;
 
   constructor() {
     this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     this.genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    
+    // Tenta recuperar sessão de visitante do storage para persistência durante refresh
+    if (typeof window !== 'undefined') {
+        const storedGuest = localStorage.getItem('lumen_guest_session');
+        if (storedGuest) {
+            try {
+                const parsed = JSON.parse(storedGuest);
+                this.guestId = parsed.id;
+                this.guestName = parsed.name;
+            } catch (e) {}
+        }
+    }
   }
 
   // --- AI Feature (Lumen) ---
@@ -47,6 +59,8 @@ class SupabaseService {
     
     if (data.user) {
         this.isGuest = false;
+        this.guestId = null;
+        localStorage.removeItem('lumen_guest_session');
         return {
             user: {
                 id: data.user.id,
@@ -98,25 +112,40 @@ class SupabaseService {
 
   async signInAsGuest(): Promise<UserProfile> {
       this.isGuest = true;
+      
+      // Gera ou recupera identidade única para o visitante
+      if (!this.guestId) {
+          const randomSuffix = Math.floor(Math.random() * 10000);
+          this.guestId = `guest-${Date.now()}-${randomSuffix}`;
+          this.guestName = `Visitante ${randomSuffix}`;
+          
+          localStorage.setItem('lumen_guest_session', JSON.stringify({
+              id: this.guestId,
+              name: this.guestName
+          }));
+      }
+
       return {
-          id: 'guest-user',
+          id: this.guestId,
           email: 'visitante@lumen.app',
-          name: 'Visitante',
+          name: this.guestName || 'Visitante',
           avatar_url: undefined
       };
   }
 
   async signOut(): Promise<void> {
     this.isGuest = false;
+    this.guestId = null;
+    localStorage.removeItem('lumen_guest_session');
     await this.client.auth.signOut();
   }
 
   async getCurrentUser(): Promise<UserProfile | null> {
-    if (this.isGuest) {
+    if (this.isGuest && this.guestId) {
         return {
-            id: 'guest-user',
+            id: this.guestId,
             email: 'visitante@lumen.app',
-            name: 'Visitante',
+            name: this.guestName || 'Visitante',
             avatar_url: undefined
         };
     }
@@ -135,7 +164,16 @@ class SupabaseService {
   }
 
   async updateProfile(name: string, avatarUrl?: string): Promise<{ error: any }> {
-      if (this.isGuest) return { error: "Visitantes não podem editar perfil" };
+      // Permitir que visitantes editem nome localmente para o chat
+      if (this.isGuest && this.guestId) {
+          this.guestName = name;
+          // Se for visitante, não temos auth.users para atualizar, mas podemos simular atualização local
+          localStorage.setItem('lumen_guest_session', JSON.stringify({
+              id: this.guestId,
+              name: this.guestName
+          }));
+          return { error: null };
+      }
 
       const updates: any = {
           data: { full_name: name }
@@ -149,10 +187,12 @@ class SupabaseService {
   }
 
   async uploadFile(file: File, path: string): Promise<string | null> {
-      if (this.isGuest) return null;
-
+      // Visitantes também podem enviar imagens se o RLS permitir (que liberamos no SQL)
+      // O path deve ser ajustado para não conflitar
+      const safePath = this.isGuest ? `guests/${path}` : path;
+      
       const fileExt = file.name.split('.').pop();
-      const fileName = `${path}/${Date.now()}.${fileExt}`;
+      const fileName = `${safePath}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await this.client.storage
           .from('lumen-media')
@@ -170,7 +210,7 @@ class SupabaseService {
       return data.publicUrl;
   }
 
-  // --- Reading Plans (Novas Tabelas: reading_plans, user_plans) ---
+  // --- Reading Plans ---
 
   async fetchReadingPlans(): Promise<ReadingPlan[]> {
     if (this.isGuest) return [];
@@ -220,7 +260,6 @@ class SupabaseService {
     const user = await this.getCurrentUser();
     if (!user) return;
 
-    // Tenta inserir, se já existir, faz update para active=true
     const { error } = await this.client.from('user_plans').upsert({
         user_id: user.id,
         plan_id: planId,
@@ -244,11 +283,9 @@ class SupabaseService {
     if (error) console.error("Erro ao atualizar progresso:", error);
   }
 
-  // --- Prayers (Tabela: prayers) ---
+  // --- Prayers ---
 
   async fetchPrayers(): Promise<PrayerRequest[]> {
-    if (this.isGuest) return MOCK_PRAYERS;
-
     const { data, error } = await this.client
       .from('prayers')
       .select('*')
@@ -264,8 +301,6 @@ class SupabaseService {
   }
 
   async createPrayer(text: string, isAnonymous: boolean): Promise<PrayerRequest> {
-    if (this.isGuest) throw new Error("Visitantes não podem criar orações.");
-
     const user = await this.getCurrentUser();
     
     const newPrayer = {
@@ -288,18 +323,15 @@ class SupabaseService {
   }
 
   async incrementPrayerCount(prayerId: string): Promise<void> {
-    if (this.isGuest) return;
     const { data: prayer } = await this.client.from('prayers').select('prayed_count').eq('id', prayerId).single();
     if (prayer) {
         await this.client.from('prayers').update({ prayed_count: prayer.prayed_count + 1 }).eq('id', prayerId);
     }
   }
 
-  // --- Groups (Tabela: study_groups) ---
+  // --- Groups ---
 
   async fetchGroups(): Promise<StudyGroup[]> {
-    if (this.isGuest) return MOCK_GROUPS;
-
     const { data, error } = await this.client
       .from('study_groups')
       .select('*')
@@ -310,7 +342,6 @@ class SupabaseService {
   }
 
   async createGroup(name: string, description: string): Promise<StudyGroup> {
-    if (this.isGuest) throw new Error("Visitantes não podem criar grupos.");
     const user = await this.getCurrentUser();
 
     const { data, error } = await this.client
@@ -325,14 +356,12 @@ class SupabaseService {
       .single();
 
     if (error) {
-        console.warn("Using mock response for createGroup due to error (likely RLS):", error);
-        return { id: 'mock-group-' + Date.now(), name, description, members_count: 1, image_url: undefined, created_by: user?.id };
+        throw error;
     }
     return data as StudyGroup;
   }
 
   async updateGroup(groupId: string, name: string, description: string): Promise<StudyGroup> {
-      if (this.isGuest) throw new Error("Visitantes não podem editar grupos.");
       const { data, error } = await this.client
           .from('study_groups')
           .update({ name, description })
@@ -344,17 +373,14 @@ class SupabaseService {
   }
 
   async deleteGroup(groupId: string): Promise<void> {
-      if (this.isGuest) throw new Error("Visitantes não podem excluir grupos.");
       const { error } = await this.client.from('study_groups').delete().eq('id', groupId);
       if (error) throw error;
   }
 
 
-  // --- Chat (Tabela: messages) ---
+  // --- Chat ---
 
   async fetchMessages(groupId: string): Promise<ChatMessage[]> {
-    if (this.isGuest) return MOCK_MESSAGES.filter(m => m.group_id === groupId);
-
     const { data, error } = await this.client
       .from('messages')
       .select('*')
@@ -387,6 +413,7 @@ class SupabaseService {
       onNewMessage: (msg: ChatMessage) => void,
       onTyping?: (user: { name: string, avatar?: string }) => void
   ): RealtimeChannel {
+      console.log(`Subscribing to chat group: ${groupId}`);
       const channel = this.client.channel(`public:messages:group_id=eq.${groupId}`);
 
       channel
@@ -419,22 +446,21 @@ class SupabaseService {
               { event: 'typing' }, 
               async ({ payload }) => {
                   const currentUser = await this.getCurrentUser();
-                  // Ignora se for o próprio usuário
                   if (payload.userId !== currentUser?.id && onTyping) {
                       onTyping(payload);
                   }
               }
           )
-          .subscribe();
+          .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                  console.log('Realtime conectado!');
+              }
+          });
 
       return channel;
   }
 
-  async sendTypingEvent(channel: RealtimeChannel): Promise<void> {
-      if (this.isGuest) return;
-      const user = await this.getCurrentUser();
-      if (!user) return;
-
+  async sendTypingEvent(channel: RealtimeChannel, user: UserProfile): Promise<void> {
       await channel.send({
           type: 'broadcast',
           event: 'typing',
@@ -454,10 +480,11 @@ class SupabaseService {
       groupId: string, 
       text: string, 
       replyTo?: {id: string, user: string, text: string},
-      imageUrl?: string
+      imageUrl?: string,
+      userOverride?: UserProfile 
   ): Promise<ChatMessage> {
-    const user = await this.getCurrentUser();
-    if (!user || this.isGuest) throw new Error("Usuário não autenticado");
+    const user = userOverride || await this.getCurrentUser();
+    if (!user) throw new Error("Usuário não autenticado");
 
     const newMessage = {
       group_id: groupId,
@@ -471,6 +498,7 @@ class SupabaseService {
       image_url: imageUrl
     };
 
+    // INSERÇÃO REAL. Se falhar, lançará erro e o UI saberá.
     const { data, error } = await this.client
       .from('messages')
       .insert(newMessage)
@@ -478,13 +506,8 @@ class SupabaseService {
       .single();
 
     if (error) {
-        console.warn("Using mock response for sendMessage due to error:", error);
-        return {
-            id: Math.random().toString(),
-            ...newMessage,
-            timestamp: new Date().toISOString(),
-            is_me: true
-        };
+        console.error("Erro real no envio:", error);
+        throw error;
     }
 
     return {
@@ -494,95 +517,89 @@ class SupabaseService {
         is_me: true
     };
   }
-  
-  async reactToMessage(messageId: string, reaction: string): Promise<void> {
-      const user = await this.getCurrentUser();
-      if (!user || this.isGuest) return;
 
-      const { data: msg } = await this.client.from('messages').select('reactions').eq('id', messageId).single();
-      if (!msg) return;
+  // --- Bible Features ---
 
-      const currentReactions = msg.reactions || {};
-      
-      if (currentReactions[user.id] === reaction) {
-          delete currentReactions[user.id];
-      } else {
-          currentReactions[user.id] = reaction;
-      }
-
-      await this.client
-        .from('messages')
-        .update({ reactions: currentReactions })
-        .eq('id', messageId);
-  }
-
-  // --- BIBLE & ROUTINE (Mantido igual) ---
-  
   async fetchBibleNotes(): Promise<Record<string, string>> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return {};
-    const { data, error } = await this.client.from('bible_notes').select('verse_key, note_content').eq('user_id', user.id);
-    if (error || !data) return {};
-    const notesMap: Record<string, string> = {};
-    data.forEach((item: any) => { notesMap[item.verse_key] = item.note_content; });
-    return notesMap;
+    if (!user) return {};
+    
+    const { data } = await this.client.from('bible_notes').select('verse_key, note_text').eq('user_id', user.id);
+    const notes: Record<string, string> = {};
+    data?.forEach((n: any) => notes[n.verse_key] = n.note_text);
+    return notes;
   }
 
-  async saveBibleNote(verseKey: string, content: string): Promise<void> {
+  async saveBibleNote(verseKey: string, text: string): Promise<void> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return;
-    await this.client.from('bible_notes').upsert({ user_id: user.id, verse_key: verseKey, note_content: content, updated_at: new Date().toISOString() }, { onConflict: 'user_id, verse_key' } as any);
+    if (!user) return;
+    await this.client.from('bible_notes').upsert({ user_id: user.id, verse_key: verseKey, note_text: text }, { onConflict: 'user_id, verse_key' });
   }
 
   async deleteBibleNote(verseKey: string): Promise<void> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return;
-    await this.client.from('bible_notes').delete().eq('user_id', user.id).eq('verse_key', verseKey);
+    if (!user) return;
+    await this.client.from('bible_notes').delete().match({ user_id: user.id, verse_key: verseKey });
   }
 
   async fetchBibleHighlights(): Promise<Record<string, string>> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return {};
-    const { data, error } = await this.client.from('bible_highlights').select('verse_key, color').eq('user_id', user.id);
-    if (error || !data) return {};
-    const highlightsMap: Record<string, string> = {};
-    data.forEach((item: any) => { highlightsMap[item.verse_key] = item.color; });
-    return highlightsMap;
+    if (!user) return {};
+    
+    const { data } = await this.client.from('bible_highlights').select('verse_key, color').eq('user_id', user.id);
+    const highlights: Record<string, string> = {};
+    data?.forEach((h: any) => highlights[h.verse_key] = h.color);
+    return highlights;
   }
 
   async saveBibleHighlight(verseKey: string, color: string): Promise<void> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return;
-    await this.deleteBibleHighlight(verseKey);
-    await this.client.from('bible_highlights').insert({ user_id: user.id, verse_key: verseKey, color: color });
+    if (!user) return;
+    await this.client.from('bible_highlights').upsert({ user_id: user.id, verse_key: verseKey, color: color }, { onConflict: 'user_id, verse_key' });
   }
 
   async deleteBibleHighlight(verseKey: string): Promise<void> {
     const user = await this.getCurrentUser();
-    if (!user || this.isGuest) return;
-    await this.client.from('bible_highlights').delete().eq('user_id', user.id).eq('verse_key', verseKey);
+    if (!user) return;
+    await this.client.from('bible_highlights').delete().match({ user_id: user.id, verse_key: verseKey });
   }
+
+  // --- Habits ---
 
   async fetchTodayHabits(): Promise<string[]> {
-      const user = await this.getCurrentUser();
-      if(!user || this.isGuest) return [];
-      const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await this.client.from('user_habits').select('habit_id').eq('user_id', user.id).eq('completed_date', today);
-      if (error || !data) return [];
-      return data.map((h: any) => h.habit_id);
+    const user = await this.getCurrentUser();
+    if (!user) return [];
+    
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await this.client.from('user_habits').select('habit_id').eq('user_id', user.id).eq('date', today);
+    return data?.map((h: any) => h.habit_id) || [];
   }
 
-  async toggleHabit(habitId: string, isCompleted: boolean): Promise<void> {
-      const user = await this.getCurrentUser();
-      if(!user || this.isGuest) return;
-      const today = new Date().toISOString().split('T')[0];
-      try {
-        if (isCompleted) {
-            await this.client.from('user_habits').insert({ user_id: user.id, habit_id: habitId, completed_date: today });
-        } else {
-            await this.client.from('user_habits').delete().eq('user_id', user.id).eq('habit_id', habitId).eq('completed_date', today);
-        }
-      } catch (e) { console.warn("Erro ao salvar hábito", e); }
+  async toggleHabit(habitId: string, completed: boolean): Promise<void> {
+    const user = await this.getCurrentUser();
+    if (!user) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    if (completed) {
+        await this.client.from('user_habits').upsert({ user_id: user.id, habit_id: habitId, date: today }, { onConflict: 'user_id, habit_id, date' });
+    } else {
+        await this.client.from('user_habits').delete().match({ user_id: user.id, habit_id: habitId, date: today });
+    }
+  }
+
+  // --- Chat Reactions ---
+
+  async reactToMessage(messageId: string, emoji: string): Promise<void> {
+    const user = await this.getCurrentUser();
+    if (!user) return;
+
+    const { data } = await this.client.from('message_reactions').select('*').match({ message_id: messageId, user_id: user.id, emoji }).single();
+    
+    if (data) {
+        await this.client.from('message_reactions').delete().match({ id: data.id });
+    } else {
+        await this.client.from('message_reactions').insert({ message_id: messageId, user_id: user.id, emoji });
+    }
   }
 }
 

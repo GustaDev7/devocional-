@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MOCK_DEVOTIONALS, DAILY_VERSES } from '../services/mockData';
 import { supabase } from '../services/supabaseService';
 import { StudyGroup, ChatMessage, UserProfile } from '../types';
-import { BookOpen, Users, ArrowLeft, Send, Plus, X, Loader2, Share2, Palette, MoreVertical, Trash2, Pencil, Heart, Reply, UploadCloud } from 'lucide-react';
+import { BookOpen, Users, ArrowLeft, Send, Plus, X, Loader2, Share2, Palette, MoreVertical, Trash2, Pencil, Heart, Reply, UploadCloud, AlertCircle, Sparkles, Check, ChevronRight } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 const THEMES = [
@@ -89,6 +89,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
                   setTypingUser(null);
                   
                   setMessages(prev => {
+                      // Check for duplicates (existing ID or same content/user recent temp)
                       const existing = prev.find(p => p.id === newMsg.id);
                       if (existing) return prev;
                       return [...prev, newMsg];
@@ -119,13 +120,17 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     };
   }, [activeGroup]);
 
-  // REMOVIDO: useEffect que simulava a "Karen" digitando. 
-  // Agora só mostrará eventos reais vindos do Supabase.
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setNewMessageText(e.target.value);
-      if (channelRef) {
-          supabase.sendTypingEvent(channelRef);
+      if (channelRef && user) {
+          supabase.sendTypingEvent(channelRef, user);
+      }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSendMessage(e);
       }
   };
 
@@ -153,7 +158,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     });
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
     if ((!newMessageText.trim() && !isSendingImage) || !activeGroup || !user) return;
 
@@ -186,10 +191,28 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     setTimeout(scrollToBottom, 50);
 
     try {
-      const realMsg = await supabase.sendMessage(activeGroup.id, textToSend, replyContext);
-      setMessages(prev => prev.map(m => m.id === tempId ? realMsg : m));
-    } catch (error) {
+      const realMsg = await supabase.sendMessage(activeGroup.id, textToSend, replyContext, undefined, user);
+      
+      setMessages(prev => {
+          // If Realtime already added the message (race condition), remove temp one
+          const alreadyExists = prev.some(m => m.id === realMsg.id);
+          if (alreadyExists) {
+              return prev.filter(m => m.id !== tempId);
+          }
+          // Otherwise swap temp with real
+          return prev.map(m => m.id === tempId ? realMsg : m);
+      });
+
+    } catch (error: any) {
       console.error("Erro ao enviar mensagem", error);
+      // Remove a mensagem otimista em caso de erro
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      
+      let errorMsg = "Não foi possível enviar a mensagem.";
+      if (error?.code === '42501' || error?.code === '0A000') {
+          errorMsg = "Erro de permissão no Banco de Dados. Por favor, rode o script SQL de correção.";
+      }
+      alert(errorMsg);
     }
   };
 
@@ -200,7 +223,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
           // Upload
           const publicUrl = await supabase.uploadFile(file, `chat/${activeGroup.id}`);
           if (publicUrl) {
-              await supabase.sendMessage(activeGroup.id, "Imagem", undefined, publicUrl);
+              await supabase.sendMessage(activeGroup.id, "Imagem", undefined, publicUrl, user);
               setTimeout(scrollToBottom, 500);
           }
         } catch(err) {
@@ -382,346 +405,613 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
 
   // ---------------- RENDER ----------------
 
-  return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-navy-950 relative animate-fade-in-up">
-      {/* HEADER */}
-      <header className={`bg-white/80 dark:bg-navy-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-navy-800 pt-4 md:pt-6 pb-4 px-6 md:px-10 sticky top-0 z-20 transition-all ${activeGroup ? 'bg-white dark:bg-navy-900 shadow-sm' : ''}`}>
-        {activeGroup ? (
-            <div className="flex items-center gap-4 animate-slide-in-right duration-300 max-w-5xl mx-auto w-full">
-                <button onClick={() => { setActiveGroup(null); setIsGroupMenuOpen(false); }} className="w-10 h-10 rounded-full bg-slate-50 dark:bg-navy-800 hover:bg-slate-100 dark:hover:bg-navy-700 flex items-center justify-center text-navy-900 dark:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95" aria-label="Voltar para lista de grupos">
-                    <ArrowLeft size={20} aria-hidden="true" />
-                </button>
-                <div className="flex-1">
-                    <h1 className="text-lg font-bold text-navy-900 dark:text-white leading-tight truncate pr-4">{activeGroup.name}</h1>
-                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1.5 font-medium mt-0.5">Online agora</span>
+  if (activeGroup) {
+    return (
+      <div 
+        className="flex flex-col h-full bg-slate-50 dark:bg-navy-950 relative animate-slide-in-right" 
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        <header className="px-4 py-3 bg-white dark:bg-navy-900 border-b border-slate-100 dark:border-navy-800 flex items-center justify-between shadow-sm sticky top-0 z-30">
+          <div className="flex items-center gap-3">
+            <button 
+                onClick={() => setActiveGroup(null)}
+                className="p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                aria-label="Voltar para grupos"
+            >
+              <ArrowLeft size={20} aria-hidden="true" />
+            </button>
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gold-100 dark:bg-navy-800 flex items-center justify-center font-bold text-gold-600 dark:text-white shadow-sm ring-2 ring-white dark:ring-navy-700">
+                    {activeGroup.name.substring(0, 1)}
                 </div>
-                <div className="relative">
-                    <button onClick={() => setIsGroupMenuOpen(!isGroupMenuOpen)} className="text-navy-900 dark:text-white p-2 hover:bg-slate-50 dark:hover:bg-navy-800 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95" aria-label="Opções do grupo" aria-haspopup="true" aria-expanded={isGroupMenuOpen}><MoreVertical size={20} aria-hidden="true" /></button>
-                    {isGroupMenuOpen && (
-                        <>
-                            <div className="fixed inset-0 z-10" onClick={() => setIsGroupMenuOpen(false)}></div>
-                            <div className="absolute right-0 top-full mt-2 w-40 bg-white dark:bg-navy-900 rounded-xl shadow-xl border border-slate-100 dark:border-navy-800 py-1.5 z-20 animate-zoom-in duration-200" role="menu">
-                                <button onClick={openEditModal} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-navy-800 flex items-center gap-2 focus:outline-none focus-bg-slate-50 dark:focus:bg-navy-800" role="menuitem"><Pencil size={14} aria-hidden="true" /> Editar</button>
-                                <button onClick={handleDeleteGroup} disabled={isDeletingGroup} className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2 focus:outline-none focus:bg-rose-50 dark:focus:bg-rose-900" role="menuitem">{isDeletingGroup ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />} Excluir</button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-        ) : (
-            <div className="animate-fade-in-up duration-300 max-w-7xl mx-auto w-full">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-6 gap-4">
-                    <div>
-                        <h1 className="text-3xl font-serif font-bold text-navy-900 dark:text-white tracking-tight">Comunidade</h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 font-medium">Conecte-se e cresça em fé.</p>
+                <div>
+                    <h2 className="font-bold text-navy-900 dark:text-white leading-tight">{activeGroup.name}</h2>
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium">Online agora</span>
                     </div>
-                    {activeTab === 'groups' && (
-                         <button onClick={() => { setNewGroupName(''); setNewGroupDesc(''); setIsCreateGroupModalOpen(true); }} className="bg-navy-900 dark:bg-gold-500 text-white p-3 rounded-2xl hover:bg-navy-800 dark:hover:bg-gold-600 transition-all shadow-lg flex items-center gap-2 px-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"><Plus size={20} aria-hidden="true" /><span className="hidden md:inline font-bold text-sm">Novo Grupo</span></button>
-                    )}
-                </div>
-                <div className="bg-slate-100/80 dark:bg-navy-800/80 p-1.5 rounded-2xl flex relative overflow-hidden max-w-md" role="tablist">
-                    <button onClick={() => setActiveTab('daily')} role="tab" aria-selected={activeTab === 'daily'} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 z-10 flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${activeTab === 'daily' ? 'bg-white dark:bg-navy-900 text-navy-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}><BookOpen size={16} aria-hidden="true" /> Diário</button>
-                    <button onClick={() => setActiveTab('groups')} role="tab" aria-selected={activeTab === 'groups'} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 z-10 flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 ${activeTab === 'groups' ? 'bg-white dark:bg-navy-900 text-navy-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}><Users size={16} aria-hidden="true" /> Grupos</button>
                 </div>
             </div>
-        )}
-      </header>
+          </div>
+          <div className="relative">
+              <button 
+                  onClick={() => setIsGroupMenuOpen(!isGroupMenuOpen)}
+                  className="p-2 text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-colors active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                  aria-label="Opções do grupo"
+              >
+                  <MoreVertical size={20} aria-hidden="true" />
+              </button>
+              
+              {isGroupMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setIsGroupMenuOpen(false)}></div>
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-navy-900 rounded-xl shadow-xl border border-slate-100 dark:border-navy-700 py-1 z-20 animate-zoom-in">
+                        <button 
+                            onClick={openEditModal}
+                            className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-navy-800 hover:text-navy-900 dark:hover:text-white flex items-center gap-2"
+                        >
+                            <Pencil size={16} /> Editar Grupo
+                        </button>
+                        <button 
+                            onClick={handleDeleteGroup}
+                            className="w-full text-left px-4 py-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center gap-2"
+                        >
+                            <Trash2 size={16} /> Excluir Grupo
+                        </button>
+                    </div>
+                  </>
+              )}
+          </div>
+        </header>
 
-      <div className="flex-1 overflow-hidden relative">
-        {/* DAILY TAB */}
-        {activeTab === 'daily' && !activeGroup && (
-            <div className="h-full overflow-y-auto px-6 md:px-10 py-6 w-full no-scrollbar pb-32 animate-fade-in-up duration-500">
-                <div className="max-w-7xl mx-auto space-y-8">
-                    
-                    {/* Emotional Compass */}
-                    <div className="bg-white dark:bg-navy-900 rounded-[2rem] p-6 shadow-soft border border-slate-50 dark:border-navy-800 relative overflow-hidden transition-all duration-300">
-                        <div className="relative z-10">
-                            <h2 className="text-lg font-bold text-navy-900 dark:text-white mb-4 flex items-center gap-2"><Heart size={18} className="text-gold-500 fill-gold-500" /> Como está seu coração hoje?</h2>
-                            
-                            {!selectedEmotion ? (
-                                <div className="flex flex-wrap gap-2 animate-fade-in">
-                                    {Object.keys(EMOTIONAL_COMPASS).map((emotion) => (
-                                        <button
-                                            key={emotion}
-                                            onClick={() => setSelectedEmotion(emotion as keyof typeof EMOTIONAL_COMPASS)}
-                                            className="px-4 py-2 rounded-full bg-slate-50 dark:bg-navy-800 hover:bg-navy-50 dark:hover:bg-navy-700 text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white font-medium text-sm transition-all active:scale-95 border border-slate-200 dark:border-navy-700 hover:border-navy-200 dark:hover:border-navy-600 capitalize"
-                                        >
-                                            {emotion}
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="animate-zoom-in">
-                                    <div className={`p-5 rounded-2xl border mb-4 ${EMOTIONAL_COMPASS[selectedEmotion].color}`}>
-                                        <p className="font-serif text-lg font-bold mb-2">"{EMOTIONAL_COMPASS[selectedEmotion].verse}"</p>
-                                        <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-4">{EMOTIONAL_COMPASS[selectedEmotion].ref}</p>
-                                        
-                                        <div className="bg-white/50 dark:bg-black/20 rounded-xl p-3 mb-3">
-                                            <p className="text-sm italic">💡 <span className="font-bold not-italic">Ação:</span> {EMOTIONAL_COMPASS[selectedEmotion].action}</p>
-                                        </div>
-                                        
-                                        <p className="text-sm">🙏 <span className="font-bold">Oração:</span> {EMOTIONAL_COMPASS[selectedEmotion].prayer}</p>
-                                    </div>
-                                    <button 
-                                        onClick={() => setSelectedEmotion(null)}
-                                        className="text-xs font-bold text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors flex items-center gap-1"
-                                    >
-                                        <ArrowLeft size={12} /> Escolher outro sentimento
-                                    </button>
+        <div className="flex-1 overflow-y-auto p-4 w-full bg-chat-pattern relative" ref={chatContainerRef}>
+            {/* Typing Indicator */}
+            {typingUser && (
+                <div className="fixed bottom-24 left-4 z-40 animate-fade-in-up">
+                    <div className="bg-white/90 dark:bg-navy-800/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-slate-100 dark:border-navy-700 flex items-center gap-3">
+                         <div className="relative">
+                             <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-navy-700 overflow-hidden ring-2 ring-white dark:ring-navy-600">
+                                 {typingUser.avatar ? (
+                                     <img src={typingUser.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                 ) : (
+                                     <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">
+                                         {getInitials(typingUser.name)}
+                                     </div>
+                                 )}
+                             </div>
+                             <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white dark:border-navy-800 rounded-full"></div>
+                         </div>
+                         <div className="flex flex-col">
+                             <span className="text-[10px] font-bold text-navy-900 dark:text-white leading-none mb-1">{typingUser.name}</span>
+                             <div className="flex gap-1">
+                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="max-w-2xl mx-auto space-y-6 pb-24 md:pb-4 pt-4">
+                {messages.length === 0 ? (
+                    <div className="text-center py-10 opacity-60">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">Nenhuma mensagem ainda. Diga olá!</p>
+                    </div>
+                ) : (
+                    messages.map((msg, idx) => {
+                        const isSequential = idx > 0 && messages[idx - 1].user_id === msg.user_id;
+                        const showAvatar = !isSequential || !msg.is_me;
+                        const messageReactions = groupReactions(msg.reactions);
+
+                        return (
+                        <div key={msg.id} className={`flex flex-col ${msg.is_me ? 'items-end' : 'items-start'} animate-fade-in-up`}>
+                            {/* Reply Context */}
+                            {msg.reply_to_text && (
+                                <div className={`mb-1 text-xs px-3 py-1.5 rounded-lg border-l-2 bg-slate-50/50 dark:bg-navy-800/50 border-slate-300 dark:border-navy-600 text-slate-500 dark:text-slate-400 max-w-[80%] truncate ${msg.is_me ? 'mr-10' : 'ml-10'}`}>
+                                    <span className="font-bold mr-1">{msg.reply_to_user}:</span>
+                                    {msg.reply_to_text}
                                 </div>
                             )}
-                        </div>
-                    </div>
 
-                    {/* Verse Hero */}
-                    <div 
-                        className="w-full relative group cursor-pointer active:scale-[0.99] transition-transform duration-300" 
-                        onClick={() => setIsStudioOpen(true)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') setIsStudioOpen(true) }}
-                        aria-label="Versículo do dia. Toque para criar imagem."
-                    >
-                        <div className="absolute inset-0 bg-gold-400 rounded-[2rem] blur-xl opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
-                        <div className="relative bg-gradient-to-br from-navy-900 to-navy-800 rounded-[2rem] p-8 md:p-10 text-white overflow-hidden shadow-2xl">
-                             <div className="flex justify-between items-start mb-4">
-                                <span className="text-[10px] font-bold bg-white/10 px-3 py-1 rounded-full uppercase tracking-widest">Versículo do Dia</span>
-                                <Palette size={20} className="text-white/50 group-hover:text-gold-400 transition-colors" />
-                             </div>
-                             <h2 className="font-serif text-2xl md:text-3xl leading-snug font-bold mb-6 text-center md:text-left">"{todaysVerse.text}"</h2>
-                             <p className="text-gold-400 font-bold tracking-wide text-sm md:text-base">— {todaysVerse.reference}</p>
-                        </div>
-                    </div>
-
-                    {/* Devotionals Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {MOCK_DEVOTIONALS.map((devotional) => {
-                            const isRead = readIds.has(devotional.id);
-                            return (
-                                <div key={devotional.id} className={`bg-white dark:bg-navy-900 rounded-[1.5rem] p-6 shadow-soft border border-slate-50 dark:border-navy-800 hover:shadow-lg transition-transform hover:scale-[1.02] duration-300 relative overflow-hidden flex flex-col h-full ${isRead ? 'opacity-70' : ''}`}>
-                                    <h2 className="text-2xl font-bold text-navy-900 dark:text-white mb-3 font-serif leading-tight">{devotional.title}</h2>
-                                    <div className="prose prose-slate prose-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-6 font-serif line-clamp-4 flex-1">{devotional.text_content}</div>
-                                    <button onClick={() => toggleRead(devotional.id)} className="w-full bg-navy-50 dark:bg-navy-800 hover:bg-navy-900 dark:hover:bg-gold-500 hover:text-white text-navy-900 dark:text-white py-3.5 rounded-xl font-bold text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95 transition-transform">
-                                        {isRead ? 'LIDO' : 'LER DEVOCIONAL'}
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* GROUPS TAB */}
-        {activeTab === 'groups' && !activeGroup && (
-            <div className="h-full overflow-y-auto px-6 md:px-10 py-6 w-full no-scrollbar pb-32 animate-fade-in-up duration-500">
-                <div className="max-w-7xl mx-auto space-y-4">
-                    {groups.map((group) => (
-                        <button key={group.id} onClick={() => setActiveGroup(group)} className="w-full bg-white dark:bg-navy-900 p-5 rounded-[1.25rem] border border-slate-100 dark:border-navy-800 shadow-soft hover:shadow-lg hover:-translate-y-1 transition-all duration-300 text-left flex items-start gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-[0.98]">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-navy-800 to-navy-900 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0" aria-hidden="true">{group.name.charAt(0).toUpperCase()}</div>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-navy-900 dark:text-white text-base mb-1">{group.name}</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{group.description}</p>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        )}
-
-        {/* CHAT INTERFACE */}
-        {activeGroup && (
-            <div 
-                className="flex flex-col h-full bg-[#f0f2f5] dark:bg-navy-950 relative animate-zoom-in duration-300"
-                onDragEnter={handleDragEnter}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-            >
-                <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]" style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '20px 20px', color: 'var(--tw-text-opacity, 1)' }}></div>
-                
-                {/* Drag Overlay */}
-                {isDragging && (
-                    <div className="absolute inset-0 z-50 bg-navy-900/80 backdrop-blur-sm flex flex-col items-center justify-center border-4 border-dashed border-gold-400 m-4 rounded-3xl animate-fade-in">
-                        <UploadCloud size={64} className="text-gold-400 mb-4 animate-bounce" />
-                        <h3 className="text-white text-2xl font-bold">Solte a imagem aqui</h3>
-                        <p className="text-slate-300 mt-2">para enviar para o grupo</p>
-                    </div>
-                )}
-
-                <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-48 md:pb-32 relative z-10 scroll-smooth">
-                    <div className="max-w-4xl mx-auto w-full">
-                        {messages.map((msg, index) => {
-                            const isMe = msg.is_me;
-                            const isSequence = index > 0 && messages[index - 1].user_id === msg.user_id;
-                            const reactionCounts = groupReactions(msg.reactions);
-
-                            return (
-                                <div key={msg.id} className={`flex gap-3 max-w-[85%] md:max-w-[70%] ${isMe ? 'self-end flex-row-reverse ml-auto' : 'self-start flex-row'} group animate-fade-in-up`}>
-                                    {!isMe ? (
-                                        <div className={`w-8 h-8 rounded-full bg-white dark:bg-navy-800 border border-slate-100 dark:border-navy-700 shadow-sm text-navy-900 dark:text-white flex items-center justify-center text-[10px] font-bold shrink-0 self-end mb-1 overflow-hidden ${isSequence ? 'invisible' : ''}`}>
-                                            {msg.user_avatar ? <img src={msg.user_avatar} alt="" className="w-full h-full object-cover"/> : getInitials(msg.user_name)}
-                                        </div>
-                                    ) : null}
-
-                                    <div className="relative">
-                                        <div 
-                                            className={`px-4 py-3 shadow-sm relative text-sm leading-relaxed break-words cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gold-400 ${isMe ? 'bg-navy-900 text-white rounded-2xl rounded-tr-sm' : 'bg-white dark:bg-navy-900 text-navy-900 dark:text-slate-100 rounded-2xl rounded-tl-sm border border-slate-100 dark:border-navy-800'}`}
-                                            onClick={() => setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id)}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
-                                                }
-                                            }}
-                                            aria-label={`Mensagem de ${msg.user_name}: ${msg.text}. Toque para reagir.`}
-                                        >
-                                            {/* Reply Context */}
-                                            {msg.reply_to_text && (
-                                                <div className={`mb-2 text-xs p-2 rounded-lg border-l-2 opacity-80 ${isMe ? 'bg-navy-800 border-gold-400' : 'bg-slate-50 dark:bg-navy-950/50 border-gold-400 text-slate-500 dark:text-slate-400'}`}>
-                                                    <span className="font-bold block mb-0.5">{msg.reply_to_user}</span>
-                                                    <span className="line-clamp-1">{msg.reply_to_text}</span>
-                                                </div>
-                                            )}
-
-                                            {!isMe && !isSequence && <span className="block text-[10px] font-bold text-gold-600 dark:text-gold-400 mb-1 uppercase">{msg.user_name}</span>}
-                                            
-                                            {/* Image Message */}
-                                            {msg.image_url ? (
-                                                <img src={msg.image_url} alt={`Imagem enviada por ${msg.user_name}`} className="rounded-lg max-w-full mb-1 border border-black/10" loading="lazy" />
-                                            ) : (
-                                                msg.text
-                                            )}
-                                        </div>
-
-                                        {/* Reactions Display */}
-                                        {reactionCounts.length > 0 && (
-                                            <div className={`absolute -bottom-3 ${isMe ? 'right-0' : 'left-0'} flex gap-1`}>
-                                                {reactionCounts.map(r => (
-                                                    <div key={r.emoji} className="bg-white dark:bg-navy-800 border border-slate-100 dark:border-navy-700 rounded-full px-1.5 py-0.5 text-[10px] shadow-sm flex items-center gap-0.5 animate-zoom-in">
-                                                        <span aria-hidden="true">{r.emoji}</span><span className="font-bold text-slate-500 dark:text-slate-400">{r.count}</span>
-                                                    </div>
-                                                ))}
+                            <div className={`flex gap-2 max-w-[85%] ${msg.is_me ? 'flex-row-reverse' : 'flex-row'}`}>
+                                {/* Avatar */}
+                                {showAvatar ? (
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-navy-800 overflow-hidden shrink-0 mt-1 shadow-sm border border-white dark:border-navy-700">
+                                        {msg.user_avatar ? (
+                                            <img src={msg.user_avatar} alt="Avatar" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                {getInitials(msg.user_name)}
                                             </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="w-8 shrink-0"></div>
+                                )}
+
+                                {/* Bubble */}
+                                <div className="relative group">
+                                    <div 
+                                        className={`px-4 py-2.5 shadow-sm text-[15px] leading-relaxed relative ${
+                                        msg.is_me 
+                                            ? 'bg-navy-900 dark:bg-gold-600 text-white rounded-2xl rounded-tr-none' 
+                                            : 'bg-white dark:bg-navy-800 text-navy-900 dark:text-slate-100 border border-slate-100 dark:border-navy-700 rounded-2xl rounded-tl-none'
+                                        } ${isSequential ? 'mt-0.5' : 'mt-0'}`}
+                                    >
+                                        {!isSequential && !msg.is_me && (
+                                            <p className="text-[10px] font-bold text-gold-600 dark:text-gold-400 mb-1 leading-none">{msg.user_name}</p>
                                         )}
                                         
-                                        {/* Context Menu */}
-                                        {activeReactionMsgId === msg.id && (
-                                            <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} bg-white dark:bg-navy-800 rounded-full shadow-xl border border-slate-100 dark:border-navy-700 p-1 flex items-center gap-1 z-20 animate-zoom-in duration-200`} role="menu">
-                                                <button onClick={() => handleReaction(msg.id, '🙏')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-navy-700 rounded-full text-lg focus:outline-none focus-bg-slate-100 active:scale-90 transition-transform" aria-label="Reagir com Mãos em oração" role="menuitem">🙏</button>
-                                                <button onClick={() => handleReaction(msg.id, '❤️')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-navy-700 rounded-full text-lg focus:outline-none focus-bg-slate-100 active:scale-90 transition-transform" aria-label="Reagir com Coração" role="menuitem">❤️</button>
-                                                <button onClick={() => handleReaction(msg.id, '🔥')} className="p-1.5 hover:bg-slate-100 dark:hover:bg-navy-700 rounded-full text-lg focus:outline-none focus-bg-slate-100 active:scale-90 transition-transform" aria-label="Reagir com Fogo" role="menuitem">🔥</button>
-                                                <div className="w-px h-4 bg-slate-200 dark:bg-navy-600 mx-1"></div>
-                                                <button onClick={() => { setReplyTo(msg); setActiveReactionMsgId(null); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-navy-700 rounded-full focus:outline-none focus-bg-slate-100 active:scale-90 transition-transform" aria-label="Responder" role="menuitem"><Reply size={16} className="text-slate-500 dark:text-slate-400" /></button>
-                                            </div>
+                                        {msg.image_url ? (
+                                            <img 
+                                                src={msg.image_url} 
+                                                alt="Imagem enviada" 
+                                                className="max-w-full rounded-lg mb-1 cursor-pointer hover:opacity-90 transition-opacity border border-white/10"
+                                                onClick={() => window.open(msg.image_url, '_blank')}
+                                            />
+                                        ) : (
+                                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                                         )}
+                                        
+                                        <p className={`text-[9px] text-right mt-1 font-medium ${msg.is_me ? 'text-white/60' : 'text-slate-400'}`}>
+                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
                                     </div>
-                                </div>
-                            );
-                        })}
-                        
-                        {/* Typing Indicator with Name and Avatar */}
-                        {typingUser && (
-                            <div className="flex gap-3 items-end animate-fade-in-up duration-300 pl-1 mt-2">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-navy-700 flex items-center justify-center mb-1 overflow-hidden shadow-sm">
-                                    {typingUser.avatar ? (
-                                        <img src={typingUser.avatar} alt={typingUser.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{getInitials(typingUser.name)}</span>
+
+                                    {/* Reactions Display */}
+                                    {messageReactions.length > 0 && (
+                                        <div className={`absolute -bottom-3 ${msg.is_me ? 'right-0' : 'left-0'} flex gap-1 z-10`}>
+                                            {messageReactions.map(({emoji, count}) => (
+                                                <div key={emoji} className="bg-white dark:bg-navy-700 shadow-sm border border-slate-100 dark:border-navy-600 rounded-full px-1.5 py-0.5 text-[10px] flex items-center gap-0.5 animate-zoom-in">
+                                                    <span>{emoji}</span>
+                                                    {count > 1 && <span className="font-bold text-slate-600 dark:text-slate-300">{count}</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Context Menu Button (Desktop Hover) */}
+                                    <button 
+                                        onClick={() => setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id)}
+                                        className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full bg-slate-100 dark:bg-navy-700 text-slate-500 hover:text-navy-900 dark:hover:text-white shadow-sm ${msg.is_me ? '-left-10' : '-right-10'}`}
+                                        aria-label="Reagir"
+                                    >
+                                        <Heart size={14} />
+                                    </button>
+
+                                    {/* Reaction Picker Popup */}
+                                    {activeReactionMsgId === msg.id && (
+                                        <div className={`absolute -top-12 ${msg.is_me ? 'right-0' : 'left-0'} bg-white dark:bg-navy-900 shadow-xl rounded-full p-1.5 flex gap-1 animate-zoom-in z-20 border border-slate-100 dark:border-navy-700`}>
+                                            {['❤️', '🙏', '🔥', '😂', '👍'].map(emoji => (
+                                                <button 
+                                                    key={emoji} 
+                                                    onClick={() => handleReaction(msg.id, emoji)}
+                                                    className="w-8 h-8 hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 active:scale-95"
+                                                >
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                            <div className="w-px h-6 bg-slate-100 dark:bg-navy-700 mx-1 self-center"></div>
+                                            <button 
+                                                onClick={() => { setReplyTo(msg); setActiveReactionMsgId(null); fileInputRef.current?.focus(); }}
+                                                className="w-8 h-8 hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full flex items-center justify-center text-slate-500 hover:text-navy-900 transition-colors"
+                                                title="Responder"
+                                            >
+                                                <Reply size={16} />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <div className="bg-white dark:bg-navy-900 border border-slate-100 dark:border-navy-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm w-fit">
-                                        <div className="flex gap-1.5 h-2 items-center">
-                                            <div className="w-1.5 h-1.5 bg-navy-400 dark:bg-slate-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                            <div className="w-1.5 h-1.5 bg-navy-400 dark:bg-slate-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                            <div className="w-1.5 h-1.5 bg-navy-400 dark:bg-slate-500 rounded-full animate-bounce"></div>
-                                        </div>
-                                    </div>
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium ml-1 animate-pulse">
-                                        {typingUser.name} digitando...
+                            </div>
+                        </div>
+                        );
+                    })
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+        </div>
+
+        {/* Drag Overlay */}
+        {isDragging && (
+            <div className="absolute inset-0 z-50 bg-navy-900/60 backdrop-blur-sm flex items-center justify-center pointer-events-none animate-fade-in">
+                <div className="bg-white dark:bg-navy-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center animate-bounce">
+                    <UploadCloud size={48} className="text-gold-500 mb-4" />
+                    <h3 className="text-xl font-bold text-navy-900 dark:text-white">Solte para enviar</h3>
+                    <p className="text-slate-500 dark:text-slate-400">Envie sua imagem para o grupo</p>
+                </div>
+            </div>
+        )}
+
+        <div className="p-4 bg-white dark:bg-navy-900 border-t border-slate-100 dark:border-navy-800 sticky bottom-0 z-30 pb-safe">
+            <div className="max-w-3xl mx-auto">
+                {replyTo && (
+                    <div className="flex items-center justify-between bg-slate-50 dark:bg-navy-800 px-4 py-2 rounded-t-xl border border-slate-200 dark:border-navy-700 border-b-0 animate-slide-in-right">
+                        <div className="flex flex-col border-l-2 border-gold-500 pl-3">
+                            <span className="text-xs font-bold text-gold-600 dark:text-gold-400">Respondendo a {replyTo.user_name}</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{replyTo.text || "Imagem"}</span>
+                        </div>
+                        <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-slate-200 dark:hover:bg-navy-700 rounded-full text-slate-500 transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+                )}
+                
+                <form 
+                    onSubmit={handleSendMessage}
+                    className={`flex items-center gap-2 bg-slate-50 dark:bg-navy-950 p-2 rounded-3xl border border-slate-200 dark:border-navy-800 focus-within:ring-2 focus-within:ring-gold-400 focus-within:bg-white dark:focus-within:bg-navy-900 transition-all shadow-inner ${replyTo ? 'rounded-t-none' : ''}`}
+                >
+                    <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-3 text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                        aria-label="Adicionar mídia"
+                    >
+                        <Plus size={22} />
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        aria-hidden="true"
+                    />
+                    
+                    <input 
+                        type="text" 
+                        value={newMessageText}
+                        onChange={handleInputChange}
+                        onKeyDown={handleKeyDown}
+                        placeholder={isSendingImage ? "Enviando imagem..." : "Digite sua mensagem..."}
+                        className="flex-1 bg-transparent outline-none text-navy-900 dark:text-white placeholder:text-slate-400 text-sm py-2"
+                        disabled={isSendingImage}
+                        autoFocus
+                    />
+                    
+                    <button 
+                        type="submit" 
+                        disabled={(!newMessageText.trim() && !isSendingImage)}
+                        className="p-3 bg-gold-500 text-white rounded-full hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-900"
+                        aria-label="Enviar"
+                    >
+                        {isSendingImage ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
+                    </button>
+                </form>
+            </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-navy-950 pb-20 animate-fade-in-up">
+      <header className="px-6 md:px-10 py-8 pb-4 bg-white dark:bg-navy-900 sticky top-0 z-20 border-b border-slate-100 dark:border-navy-800">
+        <div className="flex justify-between items-start max-w-6xl mx-auto w-full">
+            <div>
+                <h1 className="text-2xl font-bold text-navy-900 dark:text-white">Devocional</h1>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Conecte-se com a palavra e irmãos.</p>
+            </div>
+        </div>
+
+        {/* BÚSSOLA EMOCIONAL */}
+        <div className="mt-6 mb-4 max-w-6xl mx-auto w-full">
+            {!selectedEmotion ? (
+                <div className="animate-fade-in">
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">Como está seu coração hoje?</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                        {Object.keys(EMOTIONAL_COMPASS).map(emotion => (
+                            <button
+                                key={emotion}
+                                onClick={() => setSelectedEmotion(emotion as keyof typeof EMOTIONAL_COMPASS)}
+                                className="px-4 py-2 bg-white dark:bg-navy-800 border border-slate-200 dark:border-navy-700 rounded-full text-sm font-medium text-slate-600 dark:text-slate-300 hover:border-gold-400 hover:text-navy-900 dark:hover:text-white transition-all whitespace-nowrap active:scale-95 capitalize shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                            >
+                                {emotion}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className={`rounded-2xl p-5 relative overflow-hidden animate-zoom-in shadow-soft border-l-4 ${EMOTIONAL_COMPASS[selectedEmotion].color.split(' ')[2].replace('border', 'border-l')}`}>
+                    <div className={`absolute inset-0 opacity-20 ${EMOTIONAL_COMPASS[selectedEmotion].color}`}></div>
+                    <button 
+                        onClick={() => setSelectedEmotion(null)}
+                        className="absolute top-3 right-3 p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                    >
+                        <X size={16} className="text-slate-500 dark:text-slate-400" />
+                    </button>
+                    
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-60 mb-1 block">Para quando você está {selectedEmotion}</span>
+                    <p className="font-serif text-lg font-bold mb-1 leading-snug">{EMOTIONAL_COMPASS[selectedEmotion].verse}</p>
+                    <p className="text-xs font-bold opacity-60 mb-4">— {EMOTIONAL_COMPASS[selectedEmotion].ref}</p>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1 bg-white/60 dark:bg-black/20 p-3 rounded-xl backdrop-blur-sm">
+                            <div className="flex items-center gap-2 mb-1 text-xs font-bold opacity-70"><Heart size={12} /> Oração</div>
+                            <p className="text-sm italic opacity-90">"{EMOTIONAL_COMPASS[selectedEmotion].prayer}"</p>
+                        </div>
+                        <div className="flex-1 bg-white/60 dark:bg-black/20 p-3 rounded-xl backdrop-blur-sm">
+                            <div className="flex items-center gap-2 mb-1 text-xs font-bold opacity-70"><Sparkles size={12} /> Ação</div>
+                            <p className="text-sm opacity-90">{EMOTIONAL_COMPASS[selectedEmotion].action}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+
+        <div className="flex gap-6 mt-4 border-b border-slate-100 dark:border-navy-800 max-w-6xl mx-auto w-full">
+            <button 
+                onClick={() => setActiveTab('daily')}
+                className={`pb-3 text-sm font-bold transition-all relative ${activeTab === 'daily' ? 'text-navy-900 dark:text-white' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Diário
+                {activeTab === 'daily' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gold-500 rounded-full animate-zoom-in"></div>}
+            </button>
+            <button 
+                onClick={() => setActiveTab('groups')}
+                className={`pb-3 text-sm font-bold transition-all relative ${activeTab === 'groups' ? 'text-navy-900 dark:text-white' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Grupos de Estudo
+                {activeTab === 'groups' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-gold-500 rounded-full animate-zoom-in"></div>}
+            </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-6 md:px-10 py-6 w-full no-scrollbar">
+        <div className="max-w-6xl mx-auto w-full">
+            {activeTab === 'daily' ? (
+                <div className="space-y-8 pb-20 animate-slide-in-right">
+                    {/* Verse of the Day Hero */}
+                    <div className={`relative rounded-3xl p-8 overflow-hidden text-white shadow-xl group transition-all duration-500 hover:shadow-2xl hover:scale-[1.01] ${selectedTheme.class}`}>
+                        <div className="absolute top-0 right-0 p-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-white/20 transition-colors"></div>
+                        <div className="relative z-10">
+                            <div className="flex justify-between items-start mb-4">
+                                <span className="text-xs font-bold bg-white/20 backdrop-blur-md px-3 py-1 rounded-full uppercase tracking-wider">Versículo do Dia</span>
+                                <button 
+                                    onClick={() => setIsStudioOpen(true)}
+                                    className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors backdrop-blur-md active:scale-95"
+                                    title="Criar Imagem"
+                                >
+                                    <Palette size={18} />
+                                </button>
+                            </div>
+                            <h2 className="text-2xl md:text-3xl font-serif font-bold leading-relaxed mb-4">
+                                "{todaysVerse.text}"
+                            </h2>
+                            <p className="text-sm font-bold opacity-80 border-l-2 border-gold-400 pl-3">
+                                {todaysVerse.reference}
+                            </p>
+                            
+                            <div className="mt-6 flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
+                                <button onClick={() => setIsStudioOpen(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-bold backdrop-blur-sm transition-all active:scale-95">
+                                    <Share2 size={16} /> Compartilhar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-navy-900 dark:text-white flex items-center gap-2">
+                        <BookOpen className="text-gold-500" size={20} /> Devocionais Recentes
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {MOCK_DEVOTIONALS.map(devotional => (
+                            <button 
+                                key={devotional.id}
+                                onClick={() => toggleRead(devotional.id)}
+                                className="text-left bg-white dark:bg-navy-900 p-6 rounded-2xl border border-slate-100 dark:border-navy-800 shadow-soft hover:shadow-lg transition-all duration-300 hover:border-gold-300 dark:hover:border-gold-600 group relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-[0.99]"
+                            >
+                                <div className={`absolute top-0 left-0 w-1 h-full transition-colors ${readIds.has(devotional.id) ? 'bg-green-400' : 'bg-gold-400 group-hover:bg-gold-500'}`}></div>
+                                <div className="flex justify-between items-start mb-3 pl-2">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-navy-800 px-2 py-1 rounded-md">
+                                        {new Date(devotional.date).toLocaleDateString()}
+                                    </span>
+                                    {readIds.has(devotional.id) && (
+                                        <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-zoom-in">
+                                            <Check size={10} /> Lido
+                                        </span>
+                                    )}
+                                </div>
+                                <h4 className="text-lg font-bold text-navy-900 dark:text-white mb-2 pl-2 group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{devotional.title}</h4>
+                                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed line-clamp-3 mb-4 pl-2">
+                                    {devotional.text_content}
+                                </p>
+                                <div className="pl-2 pt-3 border-t border-slate-50 dark:border-navy-800 flex justify-between items-center">
+                                    <span className="text-xs font-bold text-navy-800 dark:text-slate-300">{devotional.reference_verse}</span>
+                                    <span className="text-xs text-gold-600 dark:text-gold-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-2 group-hover:translate-x-0 flex items-center gap-1">
+                                        Ler agora <ArrowLeft className="rotate-180" size={12} />
                                     </span>
                                 </div>
-                            </div>
-                        )}
-                        
-                        <div ref={messagesEndRef} />
+                            </button>
+                        ))}
                     </div>
                 </div>
-
-                <div className="absolute bottom-20 md:bottom-0 left-0 right-0 bg-white/90 dark:bg-navy-950/90 backdrop-blur-md px-4 py-3 border-t border-slate-200 dark:border-navy-800 flex flex-col justify-center pb-safe z-30">
-                    {replyTo && (
-                        <div className="max-w-4xl mx-auto w-full mb-2 bg-slate-100 dark:bg-navy-900 p-2 rounded-xl flex justify-between items-center border-l-4 border-gold-500 animate-fade-in-up">
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                                <span className="font-bold text-navy-900 dark:text-white block">Respondendo a {replyTo.user_name}</span>
-                                <span className="line-clamp-1">{replyTo.text}</span>
-                            </div>
-                            <button onClick={() => setReplyTo(null)} aria-label="Cancelar resposta"><X size={16} className="text-slate-400 dark:text-slate-500" aria-hidden="true" /></button>
-                        </div>
-                    )}
-                    <div className="flex items-center gap-3 w-full max-w-4xl mx-auto">
-                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} aria-hidden="true" />
+            ) : (
+                <div className="animate-slide-in-right pb-20">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="p-2.5 bg-slate-100 dark:bg-navy-800 rounded-full text-slate-400 dark:text-slate-500 hover:text-navy-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-navy-700 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
-                            aria-label="Enviar Imagem"
+                            onClick={() => setIsCreateGroupModalOpen(true)}
+                            className="flex flex-col items-center justify-center p-8 bg-white dark:bg-navy-900 rounded-2xl border-2 border-dashed border-slate-200 dark:border-navy-700 text-slate-400 hover:text-gold-500 hover:border-gold-300 dark:hover:border-gold-600 hover:bg-gold-50/50 dark:hover:bg-navy-800 transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95 h-full min-h-[160px]"
                         >
-                            {isSendingImage ? <Loader2 className="animate-spin" size={20} aria-hidden="true" /> : <Plus size={20} aria-hidden="true" />}
+                            <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-navy-800 group-hover:bg-white dark:group-hover:bg-navy-700 flex items-center justify-center mb-3 transition-colors shadow-sm">
+                                <Plus size={24} />
+                            </div>
+                            <span className="font-bold text-sm">Criar Novo Grupo</span>
                         </button>
-                        <form onSubmit={handleSendMessage} className="flex-1 flex gap-2 relative">
-                            <input 
-                                type="text" 
-                                className="w-full bg-slate-100 dark:bg-navy-800 rounded-2xl pl-5 pr-12 py-3.5 outline-none focus:ring-2 focus:ring-navy-900/10 dark:focus:ring-gold-500/20 focus:bg-white dark:focus:bg-navy-900 border border-transparent focus:border-navy-900/10 dark:focus:border-gold-500/20 text-sm text-navy-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-500 transition-all shadow-inner"
-                                placeholder={user?.email === 'visitante@lumen.app' ? "Visitantes apenas observam..." : "Digite sua mensagem..."}
-                                value={newMessageText}
-                                onChange={handleInputChange}
-                                disabled={user?.email === 'visitante@lumen.app'}
-                                aria-label="Digite sua mensagem"
-                            />
-                            <button type="submit" disabled={(!newMessageText.trim() && !isSendingImage) || user?.email === 'visitante@lumen.app'} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-navy-900 dark:bg-gold-500 hover:bg-navy-800 dark:hover:bg-gold-600 disabled:bg-slate-300 dark:disabled:bg-navy-700 disabled:cursor-not-allowed text-white rounded-xl flex items-center justify-center transition-all shadow-md active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400" aria-label="Enviar"><Send size={16} className="ml-0.5" aria-hidden="true" /></button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        )}
 
-        {/* MODALS (Group Create/Edit & Studio) */}
-        {isCreateGroupModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-navy-900/60 backdrop-blur-sm animate-fade-in duration-300" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
-                <div className="bg-white dark:bg-navy-900 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden p-6 space-y-5 animate-zoom-in ring-1 ring-white/10">
-                    <h3 id="create-group-title" className="text-navy-900 dark:text-white font-bold text-lg">Novo Grupo</h3>
-                    <input type="text" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="w-full bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-2xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white" placeholder="Nome" autoFocus aria-label="Nome do grupo" />
-                    <textarea value={newGroupDesc} onChange={(e) => setNewGroupDesc(e.target.value)} className="w-full bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-2xl px-4 py-3.5 text-sm outline-none h-24 resize-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white" placeholder="Descrição" aria-label="Descrição do grupo" />
-                    <div className="flex gap-2">
-                        <button onClick={() => setIsCreateGroupModalOpen(false)} className="flex-1 py-3 rounded-xl text-slate-500 dark:text-slate-400 font-bold text-sm bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95 transition-transform">Cancelar</button>
-                        <button onClick={handleCreateGroup} disabled={isCreatingGroup} className="flex-1 py-3 rounded-xl text-white font-bold text-sm bg-navy-900 dark:bg-gold-500 hover:bg-navy-800 dark:hover:bg-gold-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95 transition-transform">{isCreatingGroup ? '...' : 'Criar'}</button>
+                        {groups.map(group => (
+                            <button 
+                                key={group.id}
+                                onClick={() => setActiveGroup(group)}
+                                className="text-left bg-white dark:bg-navy-900 p-6 rounded-2xl border border-slate-100 dark:border-navy-800 shadow-soft hover:shadow-lg transition-all hover:-translate-y-1 group relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                            >
+                                <div className="absolute top-0 right-0 p-16 bg-gradient-to-br from-gold-100 to-transparent dark:from-navy-800 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl-full pointer-events-none"></div>
+                                <div className="flex items-center gap-4 mb-4 relative z-10">
+                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-navy-100 to-slate-100 dark:from-navy-800 dark:to-navy-700 flex items-center justify-center text-xl font-bold text-navy-700 dark:text-white shadow-inner">
+                                        {group.name.substring(0, 1)}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-navy-900 dark:text-white text-lg leading-tight group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{group.name}</h4>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-1">
+                                            <Users size={12} /> {group.members_count} membros
+                                        </span>
+                                    </div>
+                                </div>
+                                <p className="text-slate-600 dark:text-slate-400 text-sm line-clamp-2 relative z-10 pl-1 border-l-2 border-slate-100 dark:border-navy-700 group-hover:border-gold-300 transition-colors">
+                                    {group.description}
+                                </p>
+                            </button>
+                        ))}
                     </div>
                 </div>
-            </div>
-        )}
-        
-        {isStudioOpen && (
-             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-md animate-fade-in duration-300" role="dialog" aria-modal="true" aria-labelledby="studio-title">
-                <div className="w-full max-w-md bg-white dark:bg-navy-900 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-zoom-in duration-300 ring-1 ring-white/10">
-                    <div className="px-5 py-4 flex justify-between items-center border-b border-slate-100 dark:border-navy-800 bg-white dark:bg-navy-900 z-10">
-                        <h3 id="studio-title" className="text-navy-900 dark:text-white font-bold text-lg flex items-center gap-2">Criar Imagem</h3>
-                        <button onClick={() => setIsStudioOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center justify-center text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-90 transition-transform" aria-label="Fechar"><X size={20} aria-hidden="true" /></button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-navy-950 flex flex-col items-center">
-                        <div className={`w-full aspect-square rounded-2xl shadow-2xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden transition-all duration-500 ${selectedTheme.class}`}>
-                            <div className="relative z-10"><h2 className="font-serif text-2xl font-bold leading-tight mb-6">"{todaysVerse.text}"</h2><p className="font-sans text-sm font-bold tracking-widest uppercase opacity-70">{todaysVerse.reference}</p></div>
-                        </div>
-                    </div>
-                    <div className="p-6 bg-white dark:bg-navy-900 border-t border-slate-100 dark:border-navy-800 space-y-6">
-                        <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar" role="radiogroup" aria-label="Temas">{THEMES.map(theme => (<button key={theme.id} role="radio" aria-checked={selectedTheme.id === theme.id} aria-label={`Tema ${theme.name}`} onClick={() => setSelectedTheme(theme)} className={`w-12 h-12 rounded-full shrink-0 border-2 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gold-400 active:scale-90 ${theme.class} ${selectedTheme.id === theme.id ? 'ring-2 ring-offset-2 ring-navy-900 dark:ring-white scale-110 border-transparent' : 'border-slate-200 dark:border-navy-700'}`} />))}</div>
-                        <button onClick={handleShareImage} disabled={isSharing} className="w-full bg-navy-900 dark:bg-gold-500 hover:bg-navy-800 dark:hover:bg-gold-600 text-white font-bold py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400">{isSharing ? <Loader2 className="animate-spin" size={20} aria-hidden="true" /> : showShareSuccess ? 'Compartilhado!' : 'Compartilhar'}</button>
-                    </div>
-                </div>
-            </div>
-        )}
+            )}
+        </div>
       </div>
+
+      {/* MODAL: IMAGE STUDIO */}
+      {isStudioOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-navy-900 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl animate-zoom-in ring-1 ring-white/10">
+                  <div className="p-4 border-b border-slate-100 dark:border-navy-800 flex justify-between items-center bg-slate-50 dark:bg-navy-800">
+                      <h3 className="font-bold text-navy-900 dark:text-white flex items-center gap-2"><Palette size={18} className="text-gold-500"/> Estúdio Criativo</h3>
+                      <button onClick={() => setIsStudioOpen(false)} className="p-1 hover:bg-slate-200 dark:hover:bg-navy-700 rounded-full transition-colors"><X size={20} className="text-slate-500" /></button>
+                  </div>
+                  
+                  <div className="p-6 md:p-8 flex flex-col items-center gap-6">
+                      <div className={`w-full aspect-square md:aspect-video rounded-2xl p-8 flex flex-col justify-center items-center text-center shadow-lg transition-all duration-500 ${selectedTheme.class} relative overflow-hidden group`}>
+                          <div className="absolute inset-0 bg-black/10"></div>
+                          <div className="relative z-10">
+                              <p className="font-serif text-xl md:text-2xl font-bold leading-relaxed mb-4 drop-shadow-sm">"{todaysVerse.text}"</p>
+                              <p className="text-sm font-bold opacity-80 uppercase tracking-widest">{todaysVerse.reference}</p>
+                          </div>
+                          <div className="absolute bottom-4 right-4 opacity-50 text-[10px] font-bold uppercase tracking-widest">Lumen App</div>
+                      </div>
+
+                      <div className="w-full">
+                          <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">Escolha um Tema</p>
+                          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                              {THEMES.map(theme => (
+                                  <button 
+                                      key={theme.id}
+                                      onClick={() => setSelectedTheme(theme)}
+                                      className={`w-12 h-12 rounded-full shrink-0 border-2 transition-all shadow-sm ${theme.class} ${selectedTheme.id === theme.id ? 'border-navy-900 dark:border-white scale-110 ring-2 ring-gold-400' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-105'}`}
+                                      aria-label={`Tema ${theme.name}`}
+                                  />
+                              ))}
+                          </div>
+                      </div>
+
+                      <button 
+                          onClick={handleShareImage}
+                          disabled={isSharing}
+                          className="w-full py-4 bg-navy-900 dark:bg-gold-500 text-white font-bold rounded-xl shadow-lg hover:bg-navy-800 dark:hover:bg-gold-600 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                      >
+                          {isSharing ? <Loader2 className="animate-spin" /> : <><Share2 size={20} /> Compartilhar Imagem</>}
+                      </button>
+                      
+                      {showShareSuccess && (
+                          <div className="text-green-600 dark:text-green-400 text-sm font-bold flex items-center gap-2 animate-fade-in-up">
+                              <Check size={16} /> Imagem salva na galeria!
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL: CREATE GROUP */}
+      {isCreateGroupModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white dark:bg-navy-900 w-full max-w-md rounded-2xl shadow-xl p-6 animate-zoom-in ring-1 ring-white/10">
+                  <h3 className="text-xl font-bold text-navy-900 dark:text-white mb-4">Novo Grupo de Estudo</h3>
+                  <form onSubmit={handleCreateGroup} className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Nome do Grupo</label>
+                          <input 
+                              type="text" 
+                              value={newGroupName}
+                              onChange={e => setNewGroupName(e.target.value)}
+                              className="w-full p-3 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-xl outline-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white"
+                              placeholder="Ex: Jovens em Cristo"
+                              autoFocus
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Descrição</label>
+                          <textarea 
+                              value={newGroupDesc}
+                              onChange={e => setNewGroupDesc(e.target.value)}
+                              className="w-full p-3 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-xl outline-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white resize-none h-24"
+                              placeholder="Qual o propósito deste grupo?"
+                          />
+                      </div>
+                      <div className="flex gap-3 pt-2">
+                          <button 
+                              type="button" 
+                              onClick={() => setIsCreateGroupModalOpen(false)}
+                              className="flex-1 py-3 text-slate-500 dark:text-slate-400 font-bold hover:bg-slate-50 dark:hover:bg-navy-800 rounded-xl transition-colors"
+                          >
+                              Cancelar
+                          </button>
+                          <button 
+                              type="submit" 
+                              disabled={isCreatingGroup || !newGroupName.trim()}
+                              className="flex-1 py-3 bg-navy-900 dark:bg-gold-500 text-white font-bold rounded-xl shadow-md hover:bg-navy-800 dark:hover:bg-gold-600 disabled:opacity-50 transition-all flex items-center justify-center"
+                          >
+                              {isCreatingGroup ? <Loader2 className="animate-spin" /> : 'Criar Grupo'}
+                          </button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL: EDIT GROUP */}
+      {isEditGroupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-navy-900 w-full max-w-md rounded-2xl shadow-xl p-6 animate-zoom-in ring-1 ring-white/10">
+                <h3 className="text-xl font-bold text-navy-900 dark:text-white mb-4">Editar Grupo</h3>
+                <form onSubmit={handleUpdateGroup} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Nome do Grupo</label>
+                        <input 
+                            type="text" 
+                            value={newGroupName}
+                            onChange={e => setNewGroupName(e.target.value)}
+                            className="w-full p-3 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-xl outline-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Descrição</label>
+                        <textarea 
+                            value={newGroupDesc}
+                            onChange={e => setNewGroupDesc(e.target.value)}
+                            className="w-full p-3 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-navy-700 rounded-xl outline-none focus:ring-2 focus:ring-gold-400 text-navy-900 dark:text-white resize-none h-24"
+                        />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                        <button 
+                            type="button" 
+                            onClick={() => setIsEditGroupModalOpen(false)}
+                            className="flex-1 py-3 text-slate-500 dark:text-slate-400 font-bold hover:bg-slate-50 dark:hover:bg-navy-800 rounded-xl transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={isCreatingGroup || !newGroupName.trim()}
+                            className="flex-1 py-3 bg-navy-900 dark:bg-gold-500 text-white font-bold rounded-xl shadow-md hover:bg-navy-800 dark:hover:bg-gold-600 disabled:opacity-50 transition-all flex items-center justify-center"
+                        >
+                            {isCreatingGroup ? <Loader2 className="animate-spin" /> : 'Salvar'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
