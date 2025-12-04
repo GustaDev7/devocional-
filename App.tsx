@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState<TabType>('devotionals');
+  const [isConfigured, setIsConfigured] = useState(true);
   
   // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -41,6 +42,8 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const initApp = async () => {
+      setIsConfigured(supabase.isConfigured());
+
       // 1. Timer visual de 6 segundos (Splash Screen)
       const splashTimer = new Promise(resolve => setTimeout(resolve, 6000));
       
@@ -86,10 +89,15 @@ const App: React.FC = () => {
         if (authMode === 'login') {
             const { user: loggedUser, error } = await supabase.signInWithEmail(email, password);
             if (error) {
+                console.error("Login error:", error);
                 if (error.message.includes("Email not confirmed")) {
                     setAuthError("Email não confirmado. Verifique sua caixa de entrada.");
+                } else if (error.message.includes("System not configured") || error.message.includes("Missing Credentials")) {
+                    setAuthError("Erro de Configuração: Sistema não conectado ao banco de dados.");
+                } else if (error.message === "Invalid login credentials") {
+                    setAuthError('Email ou senha incorretos.');
                 } else {
-                    setAuthError('Email ou senha inválidos. Tente novamente.');
+                    setAuthError(error.message || 'Erro ao entrar. Tente novamente.');
                 }
             } else if (loggedUser) {
                 setUser(loggedUser);
@@ -108,7 +116,11 @@ const App: React.FC = () => {
             }
             const { user: newUser, error } = await supabase.signUpWithEmail(email, password, name);
             if (error) {
-                setAuthError(error.message || 'Erro ao criar conta. Tente outro email.');
+                if (error.message.includes("System not configured")) {
+                    setAuthError("Erro de Configuração: Sistema não conectado ao banco de dados.");
+                } else {
+                    setAuthError(error.message || 'Erro ao criar conta. Tente outro email.');
+                }
             } else if (newUser) {
                 // SUCESSO NO CADASTRO: Loga imediatamente
                 setUser(newUser);
@@ -123,7 +135,11 @@ const App: React.FC = () => {
             }
             const { error } = await supabase.resetPassword(email);
             if (error) {
-                setAuthError("Não foi possível enviar o email de recuperação.");
+                if (error.message.includes("System not configured")) {
+                    setAuthError("Erro de Configuração: Sistema não conectado ao banco de dados.");
+                } else {
+                    setAuthError("Não foi possível enviar o email de recuperação.");
+                }
             } else {
                 setAuthSuccess("Instruções de recuperação enviadas para seu email.");
                 setTimeout(() => setAuthMode('login'), 3000);
@@ -243,6 +259,14 @@ const App: React.FC = () => {
 
             <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] relative overflow-hidden ring-1 ring-white/20">
                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-gold-300 via-gold-500 to-gold-300"></div>
+
+                {!isConfigured && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl mb-6 text-xs text-center flex flex-col items-center gap-2">
+                        <AlertCircle className="text-amber-500" size={20} />
+                        <span className="font-bold">Sistema não configurado</span>
+                        <span>Verifique as chaves SUPABASE_URL e SUPABASE_ANON_KEY no arquivo .env ou nas configurações da Vercel.</span>
+                    </div>
+                )}
 
                 <form onSubmit={handleEmailAuth} className="space-y-5 pt-2">
                     {authMode === 'register' && (

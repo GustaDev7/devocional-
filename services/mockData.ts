@@ -72,11 +72,6 @@ export const BIBLE_BOOKS = [
   { name: 'Apocalipse', chapters: 22, testment: 'NT' },
 ];
 
-export const MOCK_BIBLE_TEXT: BibleVerse[] = [
-  // Fallback
-  { book: 'Gênesis', chapter: 1, verse: 1, text: 'No princípio criou Deus o céu e a terra.' },
-];
-
 export const DAILY_VERSES = [
     {
         text: "Porque eu bem sei os pensamentos que tenho a vosso respeito, diz o Senhor; pensamentos de paz, e não de mal, para vos dar o fim que esperais.",
@@ -92,26 +87,16 @@ export const DAILY_VERSES = [
     }
 ];
 
-export const MOCK_DEVOTIONALS: Devotional[] = [
-  {
-    id: '1',
-    title: 'Paz em meio à tempestade',
-    text_content: 'Muitas vezes, as circunstâncias ao nosso redor parecem caóticas. Mas a paz que Cristo oferece não é a ausência de problemas, mas a presença de Deus no meio deles. Respire fundo e lembre-se que Ele está no barco com você.',
-    reference_verse: 'João 14:27',
-    date: new Date().toISOString(),
-    is_read: false,
-  },
-  {
-    id: '2',
-    title: 'A Importância da Gratidão',
-    text_content: 'Comece o dia agradecendo pelas pequenas coisas. O ar que respiramos, o sol que nasce, a oportunidade de recomeçar. A gratidão transforma o que temos em suficiente.',
-    reference_verse: '1 Tessalonicenses 5:18',
-    date: new Date(Date.now() - 86400000).toISOString(),
-    is_read: true,
-  }
+export const EMOTIONAL_COMPASS = [
+  { id: 'ansioso', label: 'Ansioso', emoji: '😰', verse: 'Lançando sobre ele toda a vossa ansiedade, porque ele tem cuidado de vós.', ref: '1 Pedro 5:7', action: 'Respire fundo 3 vezes e entregue o controle a Deus.' },
+  { id: 'grato', label: 'Grato', emoji: '🙏', verse: 'Em tudo dai graças, porque esta é a vontade de Deus em Cristo Jesus para convosco.', ref: '1 Tessalonicenses 5:18', action: 'Liste 3 coisas boas que aconteceram hoje.' },
+  { id: 'triste', label: 'Triste', emoji: '😢', verse: 'Perto está o Senhor dos que têm o coração quebrantado.', ref: 'Salmos 34:18', action: 'Ouça um louvor que toque seu coração.' },
+  { id: 'cansado', label: 'Cansado', emoji: '😫', verse: 'Vinde a mim, todos os que estais cansados e oprimidos, e eu vos aliviarei.', ref: 'Mateus 11:28', action: 'Feche os olhos por 1 minuto e imagine Jesus te abraçando.' },
+  { id: 'feliz', label: 'Feliz', emoji: '😊', verse: 'Alegrai-vos sempre no Senhor; outra vez digo, alegrai-vos.', ref: 'Filipenses 4:4', action: 'Compartilhe sua alegria com alguém agora.' },
 ];
 
+export const MOCK_DEVOTIONALS: Devotional[] = [];
 export const MOCK_PRAYERS: PrayerRequest[] = []; 
 export const MOCK_GROUPS: StudyGroup[] = []; 
 export const MOCK_MESSAGES: ChatMessage[] = [];
-export const READING_PLANS: ReadingPlan[] = []; // Removido, agora vem do Banco de Dados
+export const READING_PLANS: ReadingPlan[] = [];

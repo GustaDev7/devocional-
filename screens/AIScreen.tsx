@@ -108,8 +108,8 @@ export const AIScreen: React.FC = () => {
            </div>
        </header>
 
-       <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 w-full relative z-10">
-           <div className="max-w-3xl mx-auto space-y-6 pb-4">
+       <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 w-full relative z-10 pb-32 md:pb-4 scroll-smooth">
+           <div className="max-w-3xl mx-auto space-y-6">
                {messages.map((msg) => (
                    <div key={msg.id} className={`flex gap-4 animate-fade-in-up ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm ${msg.role === 'user' ? 'bg-navy-100 dark:bg-navy-800 text-navy-800 dark:text-white' : 'bg-gold-100 dark:bg-gold-900/20 text-gold-700 dark:text-gold-400'}`}>
@@ -139,7 +139,7 @@ export const AIScreen: React.FC = () => {
 
        {/* Suggestions (only show if few messages) */}
        {messages.length < 3 && (
-           <div className="px-4 pb-2 max-w-3xl mx-auto w-full flex gap-2 overflow-x-auto no-scrollbar z-10 animate-fade-in">
+           <div className="px-4 pb-2 max-w-3xl mx-auto w-full flex gap-2 overflow-x-auto no-scrollbar z-10 animate-fade-in fixed bottom-36 md:bottom-20 left-0 right-0 md:relative md:bottom-auto">
                {SUGGESTIONS.map((s, i) => (
                    <button 
                        key={i} 
@@ -152,7 +152,7 @@ export const AIScreen: React.FC = () => {
            </div>
        )}
 
-       <div className="p-4 bg-white dark:bg-navy-900 border-t border-slate-100 dark:border-navy-800 sticky bottom-0 z-20 pb-safe">
+       <div className="fixed bottom-16 md:bottom-0 md:sticky left-0 right-0 md:w-full bg-white dark:bg-navy-900 border-t border-slate-100 dark:border-navy-800 p-4 z-30 pb-[env(safe-area-inset-bottom)]">
            <form 
                onSubmit={(e) => { e.preventDefault(); handleSend(input); }}
                className="max-w-3xl mx-auto relative flex items-center gap-2"

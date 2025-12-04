@@ -62,8 +62,8 @@ export const AmbientPlayer: React.FC = () => {
   return (
     <div className={`fixed z-40 transition-all duration-500 ease-out ${
         isOpen 
-        ? 'bottom-20 right-4 md:bottom-6 md:right-6 w-72' 
-        : 'bottom-20 right-4 md:bottom-6 md:right-6 w-12 h-12 rounded-full hover:scale-105'
+        ? 'bottom-36 right-4 md:bottom-6 md:right-6 w-72' 
+        : 'bottom-36 right-4 md:bottom-6 md:right-6 w-12 h-12 rounded-full hover:scale-105'
     }`}>
         {/* Minimized State */}
         {!isOpen && (
