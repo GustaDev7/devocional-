@@ -9,6 +9,7 @@ import { PrayerScreen } from './screens/PrayerScreen';
 import { RoutineScreen } from './screens/RoutineScreen';
 import { PlansScreen } from './screens/PlansScreen';
 import { AIScreen } from './screens/AIScreen';
+import { AmbientPlayer } from './components/AmbientPlayer';
 import { Loader2, Mail, Lock, User, ArrowRight, AlertCircle, Sparkles, X, Camera } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -400,6 +401,8 @@ const App: React.FC = () => {
                 {currentTab === 'ai' && <AIScreen />}
                 {currentTab === 'routine' && <RoutineScreen onLogout={handleLogout} />}
             </div>
+            {/* Ambient Player Floating Button */}
+            <AmbientPlayer />
         </main>
 
         {isProfileModalOpen && (

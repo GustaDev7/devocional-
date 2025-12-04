@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MOCK_DEVOTIONALS, DAILY_VERSES } from '../services/mockData';
 import { supabase } from '../services/supabaseService';
 import { StudyGroup, ChatMessage, UserProfile } from '../types';
-import { PlayCircle, CheckCircle2, Calendar, Users, MessageCircle, ChevronRight, ArrowLeft, Send, Plus, X, Loader2, BookOpen, Share2, Palette, Download, Check, Sparkles, Image as ImageIcon, MoreVertical, Trash2, Pencil, Heart, Flame, Reply, Smile, UploadCloud } from 'lucide-react';
+import { BookOpen, Users, ArrowLeft, Send, Plus, X, Loader2, Share2, Palette, MoreVertical, Trash2, Pencil, Heart, Reply, UploadCloud } from 'lucide-react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 const THEMES = [
@@ -67,7 +67,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
 
   // Emotional Compass State
-  const [compassOpen, setCompassOpen] = useState(false);
+  const [selectedEmotion, setSelectedEmotion] = useState<keyof typeof EMOTIONAL_COMPASS | null>(null);
 
   useEffect(() => {
     if (activeTab === 'groups') loadGroups();
@@ -119,23 +119,8 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     };
   }, [activeGroup]);
 
-  // Simular efeito de digitação com NOME E FOTO para demonstrar a UI
-  useEffect(() => {
-    if (!activeGroup) return;
-    const randomTyping = setInterval(() => {
-        // Aumentei a probabilidade para demonstrar a UI
-        if (Math.random() > 0.6 && !typingUser) {
-            // Mock de usuário digitando
-            setTypingUser({ 
-                name: "Karen", 
-                avatar: undefined // Vai usar a inicial K
-            });
-            setTimeout(() => setTypingUser(null), 4000);
-            if (shouldScrollToBottom()) setTimeout(scrollToBottom, 100);
-        }
-    }, 6000);
-    return () => clearInterval(randomTyping);
-  }, [activeGroup, typingUser]);
+  // REMOVIDO: useEffect que simulava a "Karen" digitando. 
+  // Agora só mostrará eventos reais vindos do Supabase.
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setNewMessageText(e.target.value);
@@ -356,7 +341,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     setTimeout(() => { setShowShareSuccess(false); setIsStudioOpen(false); }, 2000);
   };
 
-  // Emotional Compass Data (Embedded for better integration)
+  // Emotional Compass Data
   const EMOTIONAL_COMPASS = {
     ansioso: {
         verse: "Não andeis ansiosos por coisa alguma; antes em tudo sejam os vossos pedidos conhecidos diante de Deus...",
@@ -395,15 +380,12 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
     }
   };
 
-  const [selectedEmotion, setSelectedEmotion] = useState<keyof typeof EMOTIONAL_COMPASS | null>(null);
-
-
   // ---------------- RENDER ----------------
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-navy-950 relative animate-fade-in-up">
       {/* HEADER */}
-      <header className={`bg-white/80 dark:bg-navy-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-navy-800 pt-12 md:pt-6 pb-4 px-6 md:px-10 sticky top-0 z-20 transition-all ${activeGroup ? 'bg-white dark:bg-navy-900 shadow-sm' : ''}`}>
+      <header className={`bg-white/80 dark:bg-navy-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-navy-800 pt-4 md:pt-6 pb-4 px-6 md:px-10 sticky top-0 z-20 transition-all ${activeGroup ? 'bg-white dark:bg-navy-900 shadow-sm' : ''}`}>
         {activeGroup ? (
             <div className="flex items-center gap-4 animate-slide-in-right duration-300 max-w-5xl mx-auto w-full">
                 <button onClick={() => { setActiveGroup(null); setIsGroupMenuOpen(false); }} className="w-10 h-10 rounded-full bg-slate-50 dark:bg-navy-800 hover:bg-slate-100 dark:hover:bg-navy-700 flex items-center justify-center text-navy-900 dark:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95" aria-label="Voltar para lista de grupos">
@@ -419,7 +401,7 @@ export const DevotionalScreen: React.FC<DevotionalScreenProps> = ({ user }) => {
                         <>
                             <div className="fixed inset-0 z-10" onClick={() => setIsGroupMenuOpen(false)}></div>
                             <div className="absolute right-0 top-full mt-2 w-40 bg-white dark:bg-navy-900 rounded-xl shadow-xl border border-slate-100 dark:border-navy-800 py-1.5 z-20 animate-zoom-in duration-200" role="menu">
-                                <button onClick={openEditModal} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-navy-800 flex items-center gap-2 focus:outline-none focus:bg-slate-50 dark:focus:bg-navy-800" role="menuitem"><Pencil size={14} aria-hidden="true" /> Editar</button>
+                                <button onClick={openEditModal} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-navy-800 flex items-center gap-2 focus:outline-none focus-bg-slate-50 dark:focus:bg-navy-800" role="menuitem"><Pencil size={14} aria-hidden="true" /> Editar</button>
                                 <button onClick={handleDeleteGroup} disabled={isDeletingGroup} className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2 focus:outline-none focus:bg-rose-50 dark:focus:bg-rose-900" role="menuitem">{isDeletingGroup ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />} Excluir</button>
                             </div>
                         </>
