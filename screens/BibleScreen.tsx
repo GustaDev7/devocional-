@@ -6,11 +6,11 @@ import { Share2, PenLine, Highlighter, X, ChevronDown, Search, ChevronLeft, Chev
 import { BibleVerse } from '../types';
 
 const HIGHLIGHT_COLORS = [
-  { id: 'yellow', value: '#fef3c7', border: '#fcd34d' }, // amber-100
-  { id: 'green', value: '#dcfce7', border: '#86efac' }, // green-100
-  { id: 'blue', value: '#dbeafe', border: '#93c5fd' }, // blue-100
-  { id: 'rose', value: '#ffe4e6', border: '#fda4af' }, // rose-100
-  { id: 'purple', value: '#f3e8ff', border: '#d8b4fe' }, // purple-100
+  { id: 'yellow', value: '#fef3c7', border: '#fcd34d', label: 'Amarelo' },
+  { id: 'green', value: '#dcfce7', border: '#86efac', label: 'Verde' },
+  { id: 'blue', value: '#dbeafe', border: '#93c5fd', label: 'Azul' },
+  { id: 'rose', value: '#ffe4e6', border: '#fda4af', label: 'Rosa' },
+  { id: 'purple', value: '#f3e8ff', border: '#d8b4fe', label: 'Roxo' },
 ];
 
 const BIBLE_VERSIONS = [
@@ -21,7 +21,6 @@ const BIBLE_VERSIONS = [
   { id: 'kjv', label: 'KJV', name: 'King James Version (Inglês)' },
 ];
 
-// Dados simulados para demonstração da busca textual
 const MOCK_SEARCH_RESULTS: Record<string, {book: string, chapter: number, verse: number, text: string}[]> = {
   'amor': [
     { book: '1 Coríntios', chapter: 13, verse: 4, text: 'O amor é sofredor, é benigno; o amor não é invejoso; o amor não trata com leviandade, não se ensoberbece.' },
@@ -40,22 +39,18 @@ const MOCK_SEARCH_RESULTS: Record<string, {book: string, chapter: number, verse:
 };
 
 export const BibleScreen: React.FC = () => {
-  // Navigation State
   const [selectedBook, setSelectedBook] = useState(BIBLE_BOOKS[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
   const [selectedVersion, setSelectedVersion] = useState(BIBLE_VERSIONS[0]);
   
-  // Content State
   const [verses, setVerses] = useState<BibleVerse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [selectedVerseId, setSelectedVerseId] = useState<number | null>(null);
 
-  // Notes & Highlights State
   const [userNotes, setUserNotes] = useState<Record<string, string>>({});
   const [userHighlights, setUserHighlights] = useState<Record<string, string>>({});
   
-  // UI State
   const [isNoteEditorOpen, setIsNoteEditorOpen] = useState(false);
   const [currentNoteText, setCurrentNoteText] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -66,14 +61,12 @@ export const BibleScreen: React.FC = () => {
   const [menuMode, setMenuMode] = useState<'main' | 'colors'>('main');
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false);
 
-  // Text Search State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [textSearchQuery, setTextSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{book: string, chapter: number, verse: number, text: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // Audio / TTS State
   const [isAudioPlayerOpen, setIsAudioPlayerOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -81,13 +74,11 @@ export const BibleScreen: React.FC = () => {
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Load User Data from Supabase
   useEffect(() => {
     const loadUserData = async () => {
         try {
             const notes = await supabase.fetchBibleNotes();
             setUserNotes(notes);
-
             const highlights = await supabase.fetchBibleHighlights();
             setUserHighlights(highlights);
         } catch (e) {
@@ -96,14 +87,12 @@ export const BibleScreen: React.FC = () => {
     };
     loadUserData();
 
-    // LocalStorage apenas para versão (preferência de UI)
     const savedVersion = localStorage.getItem('lumen_bible_version');
     if (savedVersion) {
         const found = BIBLE_VERSIONS.find(v => v.id === savedVersion);
         if (found) setSelectedVersion(found);
     }
 
-    // Init Speech Synthesis
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         synthRef.current = window.speechSynthesis;
     }
@@ -115,7 +104,6 @@ export const BibleScreen: React.FC = () => {
     };
   }, []);
 
-  // Fetch Bible Text from API
   useEffect(() => {
     const fetchChapter = async () => {
       handleStopAudio();
@@ -146,6 +134,7 @@ export const BibleScreen: React.FC = () => {
                 const element = document.getElementById(`verse-${selectedVerseId}`);
                 if (element) {
                     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.focus();
                 }
              }, 500);
           }
@@ -163,10 +152,8 @@ export const BibleScreen: React.FC = () => {
     fetchChapter();
   }, [selectedBook, selectedChapter, selectedVersion]);
 
-  // Helpers
   const getVerseKey = (verseNum: number) => `${selectedBook.name}-${selectedChapter}-${verseNum}`;
 
-  // Smart Navigation Logic
   const currentBookIndex = BIBLE_BOOKS.findIndex(b => b.name === selectedBook.name);
   const isFirstChapter = currentBookIndex === 0 && selectedChapter === 1;
   const isLastChapter = currentBookIndex === BIBLE_BOOKS.length - 1 && selectedChapter === selectedBook.chapters;
@@ -193,7 +180,6 @@ export const BibleScreen: React.FC = () => {
     }
   };
 
-  // Handlers
   const handleVerseClick = (verseNum: number) => {
     if (selectedVerseId === verseNum) {
         setSelectedVerseId(null);
@@ -209,7 +195,6 @@ export const BibleScreen: React.FC = () => {
     setMenuMode('main');
   };
 
-  // --- AUDIO / TTS HANDLERS ---
   const handleSpeakText = (text: string) => {
     if (!synthRef.current) return;
     synthRef.current.cancel();
@@ -272,7 +257,6 @@ export const BibleScreen: React.FC = () => {
       }
   };
 
-  // --- SHARE ---
   const handleShare = async () => {
     if (!selectedVerseId) return;
     const verseObj = verses.find(v => v.verse === selectedVerseId);
@@ -293,26 +277,23 @@ export const BibleScreen: React.FC = () => {
     }
   };
 
-  // Highlight Handlers (Supabase)
   const handleColorSelect = async (colorValue: string | null) => {
     if (!selectedVerseId) return;
     const key = getVerseKey(selectedVerseId);
     
-    // Otimistic Update
     const updatedHighlights = { ...userHighlights };
     if (colorValue) {
         updatedHighlights[key] = colorValue;
-        supabase.saveBibleHighlight(key, colorValue); // Async call
+        supabase.saveBibleHighlight(key, colorValue); 
     } else {
         delete updatedHighlights[key];
-        supabase.deleteBibleHighlight(key); // Async call
+        supabase.deleteBibleHighlight(key); 
     }
 
     setUserHighlights(updatedHighlights);
     closeActionMenu();
   };
 
-  // Note Handlers (Supabase)
   const handleOpenNoteEditor = () => {
     if (!selectedVerseId) return;
     const key = getVerseKey(selectedVerseId);
@@ -324,7 +305,6 @@ export const BibleScreen: React.FC = () => {
     if (!selectedVerseId) return;
     const key = getVerseKey(selectedVerseId);
     
-    // Otimistic Update
     const updatedNotes = { ...userNotes };
     
     if (currentNoteText.trim()) {
@@ -381,7 +361,6 @@ export const BibleScreen: React.FC = () => {
     setIsVersionMenuOpen(false);
   };
 
-  // -- SEARCH LOGIC --
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!textSearchQuery.trim()) return;
@@ -423,80 +402,84 @@ export const BibleScreen: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col h-full bg-paper pb-20 md:pb-0 relative">
-      
-      {/* --- HEADER --- */}
-      <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 py-3 flex justify-between items-center shadow-sm transition-all w-full">
+    <div className="flex flex-col h-full bg-paper dark:bg-navy-950 pb-20 md:pb-0 relative animate-fade-in-up">
+      <header className="sticky top-0 z-20 bg-white/90 dark:bg-navy-900/90 backdrop-blur-md border-b border-slate-100 dark:border-navy-800 px-4 md:px-8 py-3 flex justify-between items-center shadow-sm transition-all w-full">
         <div className="flex items-center gap-1 md:gap-2">
             <button 
                 onClick={handlePrevChapter}
                 disabled={isFirstChapter}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-500 hover:text-navy-900 hover:border-gold-400 hover:shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-navy-800 border border-slate-200 dark:border-navy-700 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:border-gold-400 hover:shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                aria-label="Capítulo Anterior"
             >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={20} aria-hidden="true" />
             </button>
 
             <button 
               onClick={openModal}
-              className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 pl-3 pr-4 py-2 rounded-full transition-all group border border-slate-200 hover:border-gold-300"
+              className="flex items-center gap-3 bg-slate-50 dark:bg-navy-950 hover:bg-slate-100 dark:hover:bg-navy-900 pl-3 pr-4 py-2 rounded-full transition-all group border border-slate-200 dark:border-navy-800 hover:border-gold-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
             >
-              <div className="w-8 h-8 rounded-full bg-navy-900 text-white flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-navy-900 dark:bg-white text-white dark:text-navy-900 flex items-center justify-center shrink-0" aria-hidden="true">
                 <Book size={14} />
               </div>
               <div className="text-left flex flex-col leading-none">
-                <span className="text-sm font-bold text-navy-900 group-hover:text-gold-600 transition-colors">
+                <span className="text-sm font-bold text-navy-900 dark:text-white group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">
                   {selectedBook.name}
                 </span>
-                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Capítulo {selectedChapter}
                 </span>
               </div>
-              <ChevronDown size={14} className="text-slate-400 ml-1 group-hover:text-gold-500 transition-colors" />
+              <ChevronDown size={14} className="text-slate-400 ml-1 group-hover:text-gold-500 transition-colors" aria-hidden="true" />
             </button>
 
             <button 
                 onClick={handleNextChapter}
                 disabled={isLastChapter}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-500 hover:text-navy-900 hover:border-gold-400 hover:shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-navy-800 border border-slate-200 dark:border-navy-700 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:border-gold-400 hover:shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                aria-label="Próximo Capítulo"
             >
-                <ChevronRight size={20} />
+                <ChevronRight size={20} aria-hidden="true" />
             </button>
         </div>
         
         <div className="flex items-center gap-2">
             <button
                 onClick={() => setIsSearchOpen(true)}
-                className="p-2 text-navy-900 hover:bg-slate-100 rounded-full transition-colors"
+                className="p-2 text-navy-900 dark:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                aria-label="Pesquisar"
             >
-                <Search size={20} />
+                <Search size={20} aria-hidden="true" />
             </button>
             
             <div className="relative">
               <button 
                 onClick={() => setIsVersionMenuOpen(!isVersionMenuOpen)}
-                className="text-[10px] font-bold text-navy-800 tracking-wider bg-gold-100 hover:bg-gold-200 px-2 py-1.5 rounded-md border border-gold-200 transition-colors flex items-center gap-1 min-w-[3rem] justify-center"
+                className="text-[10px] font-bold text-navy-800 dark:text-navy-900 tracking-wider bg-gold-100 hover:bg-gold-200 px-2 py-1.5 rounded-md border border-gold-200 transition-all flex items-center gap-1 min-w-[3rem] justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                aria-haspopup="true"
+                aria-expanded={isVersionMenuOpen}
               >
                 {selectedVersion.label}
-                <ChevronDown size={10} />
+                <ChevronDown size={10} aria-hidden="true" />
               </button>
               
               {isVersionMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setIsVersionMenuOpen(false)}></div>
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
-                     <div className="px-3 py-2 border-b border-slate-100">
-                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Versão</span>
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-navy-900 rounded-xl shadow-xl border border-slate-100 dark:border-navy-700 py-1 z-20 animate-zoom-in duration-200" role="menu">
+                     <div className="px-3 py-2 border-b border-slate-100 dark:border-navy-800">
+                       <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Versão</span>
                      </div>
                      {BIBLE_VERSIONS.map((v) => (
                        <button
                          key={v.id}
+                         role="menuitem"
                          onClick={() => handleVersionSelect(v)}
-                         className={`w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 transition-colors flex items-center justify-between ${
-                           selectedVersion.id === v.id ? 'text-navy-900 bg-slate-50' : 'text-slate-600'
+                         className={`w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors flex items-center justify-between focus:outline-none focus:bg-slate-50 dark:focus:bg-navy-800 ${
+                           selectedVersion.id === v.id ? 'text-navy-900 dark:text-white bg-slate-50 dark:bg-navy-800' : 'text-slate-600 dark:text-slate-400'
                          }`}
                        >
                          {v.name}
-                         {selectedVersion.id === v.id && <Check size={12} className="text-gold-500" />}
+                         {selectedVersion.id === v.id && <Check size={12} className="text-gold-500" aria-hidden="true" />}
                        </button>
                      ))}
                   </div>
@@ -506,49 +489,49 @@ export const BibleScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* --- CONTENT --- */}
       <div className="flex-1 overflow-y-auto px-5 py-6 w-full relative scroll-smooth">
         <div className="max-w-2xl mx-auto w-full">
             {loading ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center pt-20 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pt-20 z-10" aria-live="polite">
                 <div className="relative">
                     <div className="absolute inset-0 bg-gold-200 rounded-full blur-xl opacity-50 animate-pulse"></div>
-                    <Loader2 className="animate-spin text-navy-900 relative z-10" size={40} />
+                    <Loader2 className="animate-spin text-navy-900 dark:text-white relative z-10" size={40} aria-hidden="true" />
                 </div>
-                <p className="text-xs text-navy-600 mt-4 font-medium tracking-wide uppercase animate-pulse">Carregando...</p>
+                <p className="text-xs text-navy-600 dark:text-slate-400 mt-4 font-medium tracking-wide uppercase animate-pulse">Carregando...</p>
             </div>
             ) : error ? (
-            <div className="text-center mt-20 px-4 flex flex-col items-center">
-                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
+            <div className="text-center mt-20 px-4 flex flex-col items-center" role="alert">
+                <div className="w-16 h-16 bg-slate-100 dark:bg-navy-800 rounded-full flex items-center justify-center mb-4 text-slate-400" aria-hidden="true">
                     <X size={24} />
                 </div>
-                <p className="text-slate-600 mb-4 text-sm font-medium">Não foi possível carregar o texto sagrado.</p>
+                <p className="text-slate-600 dark:text-slate-400 mb-4 text-sm font-medium">Não foi possível carregar o texto sagrado.</p>
                 <button 
                     onClick={() => setSelectedChapter(selectedChapter)} 
-                    className="px-6 py-2 bg-navy-900 text-white text-sm rounded-full font-medium hover:bg-navy-800 transition-colors"
+                    className="px-6 py-2 bg-navy-900 dark:bg-gold-500 text-white text-sm rounded-full font-medium hover:bg-navy-800 dark:hover:bg-gold-600 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
                 >
                 Tentar novamente
                 </button>
             </div>
             ) : (
-            <div className="space-y-6 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="text-center mb-8 border-b border-slate-100 pb-6 relative group">
-                    <span className="text-xs font-bold text-gold-500 uppercase tracking-[0.2em] mb-2 block">
+            <div className="space-y-6 pb-24 animate-fade-in-up duration-500">
+                <div className="text-center mb-8 border-b border-slate-100 dark:border-navy-800 pb-6 relative group">
+                    <span className="text-xs font-bold text-gold-600 dark:text-gold-500 uppercase tracking-[0.2em] mb-2 block">
                         {selectedBook.name}
                     </span>
-                    <h2 className="font-serif text-5xl font-bold text-navy-900">
+                    <h2 className="font-serif text-5xl font-bold text-navy-900 dark:text-white">
                     {selectedChapter}
                     </h2>
-                    <span className="text-[10px] text-slate-400 mt-2 block opacity-70">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 block opacity-70">
                         {selectedVersion.name}
                     </span>
 
                     <button 
                     onClick={handleSpeakChapter}
-                    className="absolute right-0 bottom-6 p-2 bg-slate-50 text-slate-400 hover:text-navy-900 hover:bg-gold-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                    className="absolute right-0 bottom-6 p-2 bg-slate-50 dark:bg-navy-800 text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-gold-50 dark:hover:bg-navy-700 rounded-full transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
                     title="Ouvir Capítulo"
+                    aria-label="Ouvir Capítulo"
                     >
-                    <Volume2 size={20} />
+                    <Volume2 size={20} aria-hidden="true" />
                     </button>
                 </div>
                 
@@ -563,15 +546,24 @@ export const BibleScreen: React.FC = () => {
                         <div 
                             key={verse.verse} 
                             id={`verse-${verse.verse}`}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={isSelected}
                             onClick={() => handleVerseClick(verse.verse)}
-                            style={{ backgroundColor: highlightColor || (isSelected ? '#f8fafc' : 'transparent') }}
-                            className={`font-serif text-[1.15rem] leading-[1.8] text-navy-900 cursor-pointer rounded-lg px-2 py-1 -mx-2 transition-all duration-200 relative group
-                                ${isSelected && !highlightColor ? 'bg-slate-50 shadow-sm ring-1 ring-slate-200' : ''}
-                                ${!isSelected && !highlightColor ? 'hover:bg-slate-50/50' : ''}
-                                ${isSelected && highlightColor ? 'ring-2 ring-black/5 shadow-sm' : ''}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    handleVerseClick(verse.verse);
+                                }
+                            }}
+                            style={{ backgroundColor: highlightColor || (isSelected ? 'rgba(248, 250, 252, 0.05)' : 'transparent') }}
+                            className={`font-serif text-[1.15rem] leading-[1.8] text-navy-900 dark:text-slate-200 cursor-pointer rounded-lg px-2 py-1 -mx-2 transition-all duration-200 relative group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 focus-visible:z-10 active:scale-[0.99]
+                                ${isSelected && !highlightColor ? 'bg-slate-50 dark:bg-navy-800 shadow-sm ring-1 ring-slate-200 dark:ring-navy-700' : ''}
+                                ${!isSelected && !highlightColor ? 'hover:bg-slate-50/50 dark:hover:bg-navy-800/30' : ''}
+                                ${isSelected && highlightColor ? 'ring-2 ring-black/5 dark:ring-white/10 shadow-sm text-navy-900' : ''}
                             `}
                         >
-                            <span className={`absolute left-0 top-3 text-[9px] font-sans font-bold select-none transition-colors ${isSelected ? 'text-navy-900' : 'text-slate-300 group-hover:text-slate-400'}`}>
+                            <span className={`absolute left-0 top-3 text-[9px] font-sans font-bold select-none transition-colors ${isSelected ? 'text-navy-900 dark:text-white' : 'text-slate-400 group-hover:text-slate-500 dark:text-slate-600 dark:group-hover:text-slate-500'}`} aria-hidden="true">
                             {verse.verse}
                             </span>
                             
@@ -579,7 +571,7 @@ export const BibleScreen: React.FC = () => {
                                 {verse.text}
                                 {hasNote && (
                                     <span className="inline-block ml-2 align-middle">
-                                        <MessageSquareText size={14} className="text-navy-900 fill-white" />
+                                        <MessageSquareText size={14} className="text-navy-900 dark:text-white fill-white dark:fill-navy-900" aria-label="Tem anotação" />
                                     </span>
                                 )}
                             </div>
@@ -588,25 +580,25 @@ export const BibleScreen: React.FC = () => {
                     })}
                 </div>
                 
-                <div className="flex justify-between items-center mt-12 pt-8 border-t border-slate-100">
+                <div className="flex justify-between items-center mt-12 pt-8 border-t border-slate-100 dark:border-navy-800">
                     <button 
                         disabled={isFirstChapter}
                         onClick={handlePrevChapter}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:text-navy-900 hover:bg-slate-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-navy-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
                     >
-                        <ArrowLeft size={18} /> 
+                        <ArrowLeft size={18} aria-hidden="true" /> 
                         <span className="hidden sm:inline">Anterior</span>
                     </button>
-                    <div className="text-xs text-slate-300 font-medium">
+                    <div className="text-xs text-slate-400 font-medium">
                         {selectedBook.name} {selectedChapter}
                     </div>
                     <button 
                         disabled={isLastChapter}
                         onClick={handleNextChapter}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:text-navy-900 hover:bg-slate-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-navy-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
                     >
                         <span className="hidden sm:inline">Próximo</span>
-                        <ArrowRight size={18} />
+                        <ArrowRight size={18} aria-hidden="true" />
                     </button>
                 </div>
             </div>
@@ -614,15 +606,15 @@ export const BibleScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* --- TEXT SEARCH OVERLAY --- */}
       {isSearchOpen && (
-        <div className="fixed inset-0 z-50 bg-paper flex flex-col animate-in fade-in duration-200">
-            <div className="bg-white px-4 py-3 border-b border-slate-100 shadow-sm flex items-center gap-3 shrink-0">
+        <div className="fixed inset-0 z-50 bg-paper dark:bg-navy-950 flex flex-col animate-zoom-in duration-200" role="dialog" aria-modal="true" aria-label="Busca">
+            <div className="bg-white dark:bg-navy-900 px-4 py-3 border-b border-slate-100 dark:border-navy-800 shadow-sm flex items-center gap-3 shrink-0">
                 <button 
                     onClick={() => setIsSearchOpen(false)}
-                    className="p-2 -ml-2 text-slate-400 hover:text-navy-900 hover:bg-slate-100 rounded-full transition-colors"
+                    className="p-2 -ml-2 text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                    aria-label="Fechar Busca"
                 >
-                    <ArrowLeft size={20} />
+                    <ArrowLeft size={20} aria-hidden="true" />
                 </button>
                 <form onSubmit={handleSearchSubmit} className="flex-1 relative">
                     <input
@@ -631,115 +623,117 @@ export const BibleScreen: React.FC = () => {
                         value={textSearchQuery}
                         onChange={(e) => setTextSearchQuery(e.target.value)}
                         autoFocus
-                        className="w-full bg-slate-50 text-navy-900 rounded-xl py-3 pl-4 pr-12 outline-none border border-transparent focus:border-gold-300 focus:bg-white focus:ring-4 focus:ring-gold-100 transition-all text-base"
+                        className="w-full bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white rounded-xl py-3 pl-4 pr-12 outline-none border border-transparent focus:border-gold-300 dark:focus:border-gold-500 focus:bg-white dark:focus:bg-navy-900 focus:ring-4 focus:ring-gold-100 dark:focus:ring-gold-500/20 transition-all text-base"
                     />
                     <button 
                         type="submit"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-navy-900 text-white rounded-lg hover:bg-navy-800 transition-colors"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-navy-900 dark:bg-gold-500 text-white rounded-lg hover:bg-navy-800 dark:hover:bg-gold-600 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-90"
                         disabled={!textSearchQuery.trim()}
+                        aria-label="Pesquisar"
                     >
-                        <Search size={16} />
+                        <Search size={16} aria-hidden="true" />
                     </button>
                 </form>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full">
                 {isSearching ? (
-                    <div className="flex flex-col items-center justify-center pt-20">
-                        <Loader2 className="animate-spin text-navy-900 mb-2" size={32} />
-                        <p className="text-slate-500 text-sm">Pesquisando nas escrituras...</p>
+                    <div className="flex flex-col items-center justify-center pt-20" aria-live="polite">
+                        <Loader2 className="animate-spin text-navy-900 dark:text-white mb-2" size={32} aria-hidden="true" />
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">Pesquisando nas escrituras...</p>
                     </div>
                 ) : searchResults.length > 0 ? (
-                    <div className="space-y-4 pb-20">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <div className="space-y-4 pb-20 animate-fade-in-up">
+                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2" aria-live="polite">
                             {searchResults.length} Resultados encontrados
                         </p>
                         {searchResults.map((result, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => handleSearchResultClick(result)}
-                                className="w-full text-left bg-white p-5 rounded-xl border border-slate-100 shadow-sm hover:border-gold-300 hover:shadow-md transition-all group"
+                                className="w-full text-left bg-white dark:bg-navy-900 p-5 rounded-xl border border-slate-100 dark:border-navy-800 shadow-sm hover:border-gold-300 dark:hover:border-gold-600 hover:shadow-md transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-[0.98]"
                             >
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-bold text-navy-900 group-hover:text-gold-600 transition-colors">
+                                    <span className="text-sm font-bold text-navy-900 dark:text-white group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">
                                         {result.book} {result.chapter}:{result.verse}
                                     </span>
-                                    <CornerDownLeft size={14} className="text-slate-300 group-hover:text-gold-400" />
+                                    <CornerDownLeft size={14} className="text-slate-300 group-hover:text-gold-400" aria-hidden="true" />
                                 </div>
-                                <p className="text-slate-600 font-serif text-sm leading-relaxed line-clamp-2">
+                                <p className="text-slate-600 dark:text-slate-300 font-serif text-sm leading-relaxed line-clamp-2">
                                     {result.text}
                                 </p>
                             </button>
                         ))}
                     </div>
                 ) : hasSearched ? (
-                    <div className="text-center pt-20 px-6">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                    <div className="text-center pt-20 px-6 animate-zoom-in" role="alert">
+                        <div className="w-16 h-16 bg-slate-100 dark:bg-navy-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400" aria-hidden="true">
                             <Search size={24} />
                         </div>
-                        <h3 className="text-navy-900 font-bold mb-2">Nenhum resultado</h3>
-                        <p className="text-slate-500 text-sm mb-6">
+                        <h3 className="text-navy-900 dark:text-white font-bold mb-2">Nenhum resultado</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
                             Tente buscar por termos como "amor", "paz" ou "luz" para testar a funcionalidade.
                         </p>
                     </div>
                 ) : (
                     <div className="text-center pt-20 px-6 opacity-60">
-                         <p className="text-slate-400 text-sm">Digite uma palavra para buscar versículos.</p>
+                         <p className="text-slate-500 dark:text-slate-400 text-sm">Digite uma palavra para buscar versículos.</p>
                     </div>
                 )}
             </div>
         </div>
       )}
 
-      {/* --- FLOATING ACTION MENU --- */}
       {selectedVerseId && !isNoteEditorOpen && !isSearchOpen && !isAudioPlayerOpen && (
-        <div className="fixed bottom-24 md:bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-sm bg-navy-900/95 backdrop-blur shadow-2xl rounded-2xl p-2 z-40 animate-in slide-in-from-bottom-5 fade-in duration-300 ring-1 ring-white/10">
+        <div className="fixed bottom-24 md:bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-sm bg-navy-900/95 dark:bg-navy-800/95 backdrop-blur shadow-2xl rounded-2xl p-2 z-40 animate-fade-in-up duration-300 ring-1 ring-white/10" role="toolbar" aria-label="Ações do Versículo">
            {menuMode === 'main' ? (
              <div className="flex justify-between items-center">
-                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-colors" onClick={() => setMenuMode('colors')}>
-                  <Highlighter size={18} className={userHighlights[getVerseKey(selectedVerseId)] ? "text-gold-400 fill-gold-400" : ""} />
+                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-all active:scale-95 focus:outline-none focus-visible:text-white" onClick={() => setMenuMode('colors')}>
+                  <Highlighter size={18} className={userHighlights[getVerseKey(selectedVerseId)] ? "text-gold-400 fill-gold-400" : ""} aria-hidden="true" />
                   <span className="text-[9px] font-medium uppercase tracking-wide">Destacar</span>
                 </button>
-                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-colors" onClick={handleOpenNoteEditor}>
-                  <PenLine size={18} />
+                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-all active:scale-95 focus:outline-none focus-visible:text-white" onClick={handleOpenNoteEditor}>
+                  <PenLine size={18} aria-hidden="true" />
                   <span className="text-[9px] font-medium uppercase tracking-wide">
                       {userNotes[getVerseKey(selectedVerseId)] ? 'Editar' : 'Anotar'}
                   </span>
                 </button>
-                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-colors" onClick={handleSpeakVerse}>
-                  <Volume2 size={18} />
+                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-all active:scale-95 focus:outline-none focus-visible:text-white" onClick={handleSpeakVerse}>
+                  <Volume2 size={18} aria-hidden="true" />
                   <span className="text-[9px] font-medium uppercase tracking-wide">Ouvir</span>
                 </button>
-                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-colors" onClick={handleShare}>
-                  {navigator.share ? <Share2 size={18} /> : <Copy size={18} />}
+                <button className="flex-1 flex flex-col items-center gap-1 py-2 text-slate-300 hover:text-white transition-all active:scale-95 focus:outline-none focus-visible:text-white" onClick={handleShare}>
+                  {navigator.share ? <Share2 size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
                   <span className="text-[9px] font-medium uppercase tracking-wide">
                       {navigator.share ? 'Enviar' : 'Copiar'}
                   </span>
                 </button>
                 <div className="w-px h-8 bg-white/10 mx-1"></div>
-                <button onClick={closeActionMenu} className="p-3 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
-                  <X size={18} />
+                <button onClick={closeActionMenu} className="p-3 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-all active:scale-90 focus:outline-none focus-visible:text-white" aria-label="Fechar Menu">
+                  <X size={18} aria-hidden="true" />
                 </button>
              </div>
            ) : (
-             <div className="flex items-center justify-between px-2 py-1 animate-in slide-in-from-bottom-2 fade-in">
-                <button onClick={() => setMenuMode('main')} className="mr-3 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white">
-                    <ChevronLeft size={20} />
+             <div className="flex items-center justify-between px-2 py-1 animate-zoom-in">
+                <button onClick={() => setMenuMode('main')} className="mr-3 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white focus:outline-none focus-visible:text-white transition-all active:scale-90" aria-label="Voltar">
+                    <ChevronLeft size={20} aria-hidden="true" />
                 </button>
                 <div className="flex gap-3">
                     <button 
                         onClick={() => handleColorSelect(null)}
-                        className="w-8 h-8 rounded-full border-2 border-slate-500 bg-transparent flex items-center justify-center text-slate-400 hover:border-white hover:text-white transition-all"
+                        className="w-8 h-8 rounded-full border-2 border-slate-500 bg-transparent flex items-center justify-center text-slate-400 hover:border-white hover:text-white transition-all focus:outline-none focus-visible:border-white focus-visible:text-white active:scale-90"
                         title="Remover destaque"
+                        aria-label="Remover destaque"
                     >
-                        <Ban size={14} />
+                        <Ban size={14} aria-hidden="true" />
                     </button>
                     {HIGHLIGHT_COLORS.map(color => (
                         <button
                             key={color.id}
                             onClick={() => handleColorSelect(color.value)}
-                            className="w-8 h-8 rounded-full shadow-sm transition-transform hover:scale-110 focus:scale-95"
+                            className="w-8 h-8 rounded-full shadow-sm transition-transform hover:scale-110 focus:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:scale-90"
                             style={{ backgroundColor: color.value, border: `2px solid ${color.border}` }}
+                            aria-label={`Cor ${color.label}`}
                         />
                     ))}
                 </div>
@@ -748,16 +742,15 @@ export const BibleScreen: React.FC = () => {
         </div>
       )}
 
-      {/* --- AUDIO PLAYER BAR --- */}
       {isAudioPlayerOpen && (
-        <div className="fixed bottom-24 md:bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-sm bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 rounded-2xl p-3 z-40 animate-in slide-in-from-bottom-5 fade-in duration-300 flex items-center justify-between">
+        <div className="fixed bottom-24 md:bottom-10 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:max-w-sm bg-white dark:bg-navy-900 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 dark:border-navy-700 rounded-2xl p-3 z-40 animate-fade-in-up duration-300 flex items-center justify-between" role="region" aria-label="Reprodutor de Áudio">
             <div className="flex items-center gap-2">
-                 <div className="w-10 h-10 bg-navy-50 rounded-full flex items-center justify-center text-navy-900">
-                    <Volume2 size={20} className={isPlaying ? "animate-pulse" : ""} />
+                 <div className="w-10 h-10 bg-navy-50 dark:bg-navy-800 rounded-full flex items-center justify-center text-navy-900 dark:text-white">
+                    <Volume2 size={20} className={isPlaying ? "animate-pulse" : ""} aria-hidden="true" />
                  </div>
                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-navy-900">Lendo</span>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-xs font-bold text-navy-900 dark:text-white">Lendo</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
                         {selectedVerseId ? `Versículo ${selectedVerseId}` : 'Capítulo Completo'}
                     </span>
                  </div>
@@ -766,77 +759,79 @@ export const BibleScreen: React.FC = () => {
             <div className="flex items-center gap-2">
                 <button 
                     onClick={handleChangeSpeed}
-                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-xs font-bold text-slate-500 transition-colors border border-slate-200"
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-navy-800 text-xs font-bold text-slate-500 dark:text-slate-400 transition-colors border border-slate-200 dark:border-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-90"
                     title="Velocidade"
+                    aria-label={`Velocidade ${playbackRate}x`}
                 >
                     {playbackRate}x
                 </button>
                 <button 
                     onClick={handleTogglePlayPause}
-                    className="w-10 h-10 bg-navy-900 text-white rounded-full flex items-center justify-center hover:bg-navy-800 transition-all shadow-md active:scale-95"
+                    className="w-10 h-10 bg-navy-900 dark:bg-gold-500 text-white rounded-full flex items-center justify-center hover:bg-navy-800 dark:hover:bg-gold-600 transition-all shadow-md active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
+                    aria-label={isPaused || !isPlaying ? "Reproduzir" : "Pausar"}
                 >
-                    {isPaused || !isPlaying ? <Play size={18} className="ml-1" /> : <Pause size={18} />}
+                    {isPaused || !isPlaying ? <Play size={18} className="ml-1" aria-hidden="true" /> : <Pause size={18} aria-hidden="true" />}
                 </button>
                 <button 
                     onClick={handleStopAudio}
-                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-colors"
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-rose-50 dark:hover:bg-rose-900/20 text-slate-400 hover:text-rose-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 active:scale-90"
+                    aria-label="Parar"
                 >
-                    <Square size={16} fill="currentColor" />
+                    <Square size={16} fill="currentColor" aria-hidden="true" />
                 </button>
             </div>
         </div>
       )}
 
-      {/* --- TOAST --- */}
       {showToast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-navy-800 text-white px-5 py-3 rounded-full shadow-xl z-[60] flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 border border-navy-700">
-            <Check size={16} className="text-green-400" />
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-navy-800 text-white px-5 py-3 rounded-full shadow-xl z-[60] flex items-center gap-3 animate-fade-in-up duration-300 border border-navy-700" role="status">
+            <Check size={16} className="text-green-400" aria-hidden="true" />
             <span className="text-xs font-medium tracking-wide">Versículo copiado para área de transferência</span>
         </div>
       )}
 
-      {/* --- NOTE EDITOR MODAL --- */}
       {isNoteEditorOpen && selectedVerseId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm animate-fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+            <div className="bg-white dark:bg-navy-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-zoom-in duration-200 ring-1 ring-white/10">
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-navy-800 flex justify-between items-center bg-slate-50/50 dark:bg-navy-800/50">
                     <div>
-                        <h3 className="text-navy-900 font-bold">Minha Anotação</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">{selectedBook.name} {selectedChapter}:{selectedVerseId}</p>
+                        <h3 id="note-modal-title" className="text-navy-900 dark:text-white font-bold">Minha Anotação</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{selectedBook.name} {selectedChapter}:{selectedVerseId}</p>
                     </div>
-                    <button onClick={() => setIsNoteEditorOpen(false)} className="text-slate-400 hover:text-navy-900 transition-colors">
-                        <X size={20} />
+                    <button onClick={() => setIsNoteEditorOpen(false)} className="text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-lg p-1 active:scale-90" aria-label="Fechar">
+                        <X size={20} aria-hidden="true" />
                     </button>
                 </div>
                 <div className="p-5">
                     <textarea 
-                        className="w-full h-40 p-3 bg-slate-50 rounded-xl border border-slate-200 text-navy-900 placeholder:text-slate-400 resize-none outline-none focus:ring-2 focus:ring-gold-200 focus:border-gold-400 text-sm leading-relaxed"
+                        className="w-full h-40 p-3 bg-slate-50 dark:bg-navy-950 rounded-xl border border-slate-200 dark:border-navy-700 text-navy-900 dark:text-white placeholder:text-slate-400 resize-none outline-none focus:ring-2 focus:ring-gold-200 dark:focus:ring-gold-500/30 focus:border-gold-400 text-sm leading-relaxed"
                         placeholder="Escreva seus pensamentos sobre este versículo..."
                         value={currentNoteText}
                         onChange={(e) => setCurrentNoteText(e.target.value)}
                         autoFocus
+                        aria-label="Conteúdo da anotação"
                     />
                     <div className="flex gap-3 mt-4">
                         {userNotes[getVerseKey(selectedVerseId)] && (
                             <button 
                                 onClick={handleDeleteNote}
-                                className="px-4 py-2.5 rounded-xl border border-rose-100 text-rose-600 hover:bg-rose-50 font-medium text-sm flex items-center gap-2 transition-colors"
+                                className="px-4 py-2.5 rounded-xl border border-rose-100 dark:border-rose-900/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 font-medium text-sm flex items-center gap-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 active:scale-95"
                             >
-                                <Trash2 size={16} />
+                                <Trash2 size={16} aria-hidden="true" /> Excluir
                             </button>
                         )}
                         <div className="flex-1 flex gap-3 justify-end">
                             <button 
                                 onClick={() => setIsNoteEditorOpen(false)}
-                                className="px-5 py-2.5 rounded-xl text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
+                                className="px-5 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 font-medium text-sm hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
                             >
                                 Cancelar
                             </button>
                             <button 
                                 onClick={handleSaveNote}
-                                className="px-6 py-2.5 rounded-xl bg-navy-900 text-white font-medium text-sm shadow-lg hover:bg-navy-800 active:scale-95 transition-all flex items-center gap-2"
+                                className="px-6 py-2.5 rounded-xl bg-navy-900 dark:bg-gold-500 text-white font-medium text-sm shadow-lg hover:bg-navy-800 dark:hover:bg-gold-600 active:scale-95 transition-all flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                             >
-                                <Save size={16} />
+                                <Save size={16} aria-hidden="true" />
                                 Salvar
                             </button>
                         </div>
@@ -846,47 +841,49 @@ export const BibleScreen: React.FC = () => {
         </div>
       )}
 
-      {/* --- ROBUST SELECTION MODAL --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 animate-in slide-in-from-bottom-[5%] duration-300">
-            <div className="bg-white px-4 py-3 border-b border-slate-200 shadow-sm flex items-center justify-between shrink-0 z-10">
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 dark:bg-navy-950 animate-fade-in-up duration-300" role="dialog" aria-modal="true" aria-label="Seleção de Livro e Capítulo">
+            <div className="bg-white dark:bg-navy-900 px-4 py-3 border-b border-slate-200 dark:border-navy-800 shadow-sm flex items-center justify-between shrink-0 z-10">
                 {modalStep === 'chapter' ? (
                     <button 
                         onClick={() => setModalStep('book')} 
-                        className="p-2 -ml-2 text-slate-500 hover:text-navy-900 hover:bg-slate-100 rounded-full transition-colors flex items-center gap-1"
+                        className="p-2 -ml-2 text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-colors flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                        aria-label="Voltar para seleção de livros"
                     >
-                        <ChevronLeft size={20} />
+                        <ChevronLeft size={20} aria-hidden="true" />
                         <span className="text-sm font-medium">Livros</span>
                     </button>
                 ) : (
                     <div className="w-20"></div> 
                 )}
                 
-                <h2 className="text-sm font-bold text-navy-900 uppercase tracking-widest">
+                <h2 className="text-sm font-bold text-navy-900 dark:text-white uppercase tracking-widest">
                     {modalStep === 'book' ? 'Selecionar Livro' : tempSelectedBook.name}
                 </h2>
 
                 <button 
                     onClick={() => setIsModalOpen(false)} 
-                    className="p-2 -mr-2 text-slate-400 hover:text-navy-900 hover:bg-slate-100 rounded-full transition-colors"
+                    className="p-2 -mr-2 text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95"
+                    aria-label="Fechar"
                 >
-                    <X size={20} />
+                    <X size={20} aria-hidden="true" />
                 </button>
             </div>
 
             <div className="flex-1 overflow-hidden relative">
                 {modalStep === 'book' ? (
                     <div className="flex flex-col h-full">
-                        <div className="px-4 py-3 bg-white border-b border-slate-100">
+                        <div className="px-4 py-3 bg-white dark:bg-navy-900 border-b border-slate-100 dark:border-navy-800">
                             <div className="relative group">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold-500 transition-colors" size={18} />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-gold-500 transition-colors" size={18} aria-hidden="true" />
                                 <input 
                                     type="text" 
                                     placeholder="Buscar livro (ex: João)..." 
                                     value={bookSearchQuery}
                                     onChange={(e) => setBookSearchQuery(e.target.value)}
-                                    className="w-full bg-slate-50 text-navy-900 rounded-xl py-3 pl-10 pr-4 outline-none border border-transparent focus:border-gold-300 focus:bg-white focus:ring-4 focus:ring-gold-100 transition-all placeholder:text-slate-400 text-base"
+                                    className="w-full bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white rounded-xl py-3 pl-10 pr-4 outline-none border border-transparent focus:border-gold-300 dark:focus:border-gold-600 focus:bg-white dark:focus:bg-navy-900 focus:ring-4 focus:ring-gold-100 dark:focus:ring-gold-500/20 transition-all placeholder:text-slate-400 text-base"
                                     autoFocus
+                                    aria-label="Buscar livro"
                                 />
                             </div>
                         </div>
@@ -894,24 +891,24 @@ export const BibleScreen: React.FC = () => {
                         <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
                             {filteredBooks.length === 0 && (
                                 <div className="text-center py-20 text-slate-400 flex flex-col items-center">
-                                    <Search size={32} className="mb-2 opacity-50" />
+                                    <Search size={32} className="mb-2 opacity-50" aria-hidden="true" />
                                     <p>Nenhum livro encontrado</p>
                                 </div>
                             )}
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-20">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-20 animate-fade-in-up">
                                 {filteredBooks.map((book) => (
                                     <button
                                         key={book.name}
                                         onClick={() => handleBookSelect(book)}
-                                        className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-gold-300 hover:shadow-md active:scale-[0.98] transition-all text-left group"
+                                        className="flex items-center justify-between p-4 bg-white dark:bg-navy-900 rounded-xl border border-slate-100 dark:border-navy-800 shadow-sm hover:border-gold-300 dark:hover:border-gold-600 hover:shadow-md active:scale-[0.98] transition-all text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-1 h-8 rounded-full ${book.testment === 'VT' ? 'bg-navy-200' : 'bg-gold-400'}`}></div>
-                                            <span className="font-semibold text-navy-800 group-hover:text-navy-900 text-lg">{book.name}</span>
+                                            <div className={`w-1 h-8 rounded-full ${book.testment === 'VT' ? 'bg-navy-200 dark:bg-navy-700' : 'bg-gold-400'}`}></div>
+                                            <span className="font-semibold text-navy-800 dark:text-slate-200 group-hover:text-navy-900 dark:group-hover:text-white text-lg">{book.name}</span>
                                         </div>
                                         <div className="flex flex-col items-end">
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${book.testment === 'VT' ? 'bg-slate-100 text-slate-500' : 'bg-gold-50 text-gold-700'}`}>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${book.testment === 'VT' ? 'bg-slate-100 dark:bg-navy-800 text-slate-500 dark:text-slate-400' : 'bg-gold-50 dark:bg-gold-900/30 text-gold-700 dark:text-gold-400'}`}>
                                                 {book.testment}
                                             </span>
                                             <span className="text-[10px] text-slate-400 mt-1">{book.chapters} caps</span>
@@ -922,19 +919,19 @@ export const BibleScreen: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div className="h-full overflow-y-auto bg-slate-50">
+                    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-navy-950 animate-slide-in-right">
                         <div className="p-6 pb-20 max-w-4xl mx-auto">
-                            <p className="text-sm text-slate-500 mb-6 text-center font-medium">Escolha um capítulo para iniciar a leitura</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 text-center font-medium">Escolha um capítulo para iniciar a leitura</p>
                             
                             <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
                                 {Array.from({ length: tempSelectedBook.chapters }, (_, i) => i + 1).map((chap) => (
                                     <button
                                         key={chap}
                                         onClick={() => handleChapterSelect(chap)}
-                                        className={`aspect-square rounded-2xl font-bold text-lg flex items-center justify-center transition-all duration-200 ${
+                                        className={`aspect-square rounded-2xl font-bold text-lg flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 active:scale-95 ${
                                             selectedChapter === chap && selectedBook.name === tempSelectedBook.name
-                                                ? 'bg-navy-900 text-white shadow-lg ring-4 ring-navy-100'
-                                                : 'bg-white text-navy-800 border border-slate-200 hover:border-gold-400 hover:text-gold-600 hover:shadow-md active:scale-95'
+                                                ? 'bg-navy-900 dark:bg-gold-500 text-white shadow-lg ring-4 ring-navy-100 dark:ring-navy-800'
+                                                : 'bg-white dark:bg-navy-900 text-navy-800 dark:text-white border border-slate-200 dark:border-navy-700 hover:border-gold-400 hover:text-gold-600 dark:hover:text-gold-400 hover:shadow-md'
                                         }`}
                                     >
                                         {chap}

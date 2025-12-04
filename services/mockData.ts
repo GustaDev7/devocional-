@@ -1,5 +1,5 @@
 
-import { BibleVerse, Devotional, PrayerRequest, StudyGroup, ChatMessage } from '../types';
+import { BibleVerse, Devotional, PrayerRequest, StudyGroup, ChatMessage, ReadingPlan } from '../types';
 
 export const BIBLE_BOOKS = [
   // Antigo Testamento
@@ -111,56 +111,7 @@ export const MOCK_DEVOTIONALS: Devotional[] = [
   }
 ];
 
-export const MOCK_PRAYERS: PrayerRequest[] = [
-  {
-    id: '101',
-    user_id: 'u1',
-    author_name: 'Maria Silva',
-    request_text: 'Peço oração pela saúde da minha mãe que fará uma cirurgia amanhã.',
-    is_anonymous: false,
-    status: 'pending',
-    prayed_count: 12,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '102',
-    user_id: 'u2',
-    author_name: '',
-    request_text: 'Orem por mim, estou passando por um momento de muita ansiedade no trabalho.',
-    is_anonymous: true,
-    status: 'pending',
-    prayed_count: 5,
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-  }
-];
-
-export const MOCK_GROUPS: StudyGroup[] = [
-  {
-    id: 'g1',
-    name: 'Café com Deus',
-    description: 'Um espaço para compartilharmos nosso devocional matinal e orarmos uns pelos outros.',
-    members_count: 42,
-    image_url: undefined
-  }
-];
-
-export const MOCK_MESSAGES: ChatMessage[] = [
-  {
-    id: 'm1',
-    group_id: 'g1',
-    user_id: 'u_pastor',
-    user_name: 'Pr. Lucas',
-    text: 'Bom dia pessoal! A paz do Senhor. Hoje vamos meditar no Salmo 23.',
-    timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-    is_me: false
-  },
-   {
-    id: 'm2',
-    group_id: 'g1',
-    user_id: 'u_ana',
-    user_name: 'Ana Souza',
-    text: 'Amém! Esse salmo sempre renova minhas forças.',
-    timestamp: new Date(Date.now() - 1800000).toISOString(), // 30 mins ago
-    is_me: false
-  }
-];
+export const MOCK_PRAYERS: PrayerRequest[] = []; 
+export const MOCK_GROUPS: StudyGroup[] = []; 
+export const MOCK_MESSAGES: ChatMessage[] = [];
+export const READING_PLANS: ReadingPlan[] = []; // Removido, agora vem do Banco de Dados

@@ -1,7 +1,8 @@
 
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
-import { UserProfile, PrayerRequest, StudyGroup, ChatMessage } from '../types';
+import { UserProfile, PrayerRequest, StudyGroup, ChatMessage, ReadingPlan } from '../types';
 import { MOCK_PRAYERS, MOCK_GROUPS, MOCK_MESSAGES } from './mockData';
+import { GoogleGenAI } from "@google/genai";
 
 // Credenciais fornecidas
 const SUPABASE_URL = 'https://yyxfposhfurploozfegy.supabase.co';
@@ -10,9 +11,28 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 class SupabaseService {
   private client: SupabaseClient;
   private isGuest: boolean = false;
+  private genAI: GoogleGenAI;
 
   constructor() {
     this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    this.genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  }
+
+  // --- AI Feature (Lumen) ---
+  async askLumen(prompt: string): Promise<string> {
+    try {
+        const response = await this.genAI.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                systemInstruction: "Você é o Lumen, um assistente teológico cristão acolhedor, sábio e sereno. Sua missão é ajudar o usuário a entender a Bíblia, oferecer conselhos baseados na fé cristã e explicar conceitos teológicos com clareza. Use referências bíblicas (livro, capítulo e versículo) sempre que possível. Formate sua resposta usando Markdown para melhor leitura (negrito para versículos, listas para pontos chave). Seja conciso, mas profundo. Se a pergunta não for sobre fé ou teologia, gentilmente traga o assunto de volta para uma perspectiva espiritual.",
+            }
+        });
+        return response.text || "Desculpe, não consegui formular uma resposta no momento. Tente novamente.";
+    } catch (error) {
+        console.error("Lumen AI Error:", error);
+        return "Estou tendo dificuldades para conectar com a sabedoria divina no momento. Por favor, verifique sua conexão ou tente mais tarde.";
+    }
   }
 
   // --- Auth & Profile ---
@@ -114,7 +134,6 @@ class SupabaseService {
     return null;
   }
 
-  // Atualiza Perfil (Nome e Foto)
   async updateProfile(name: string, avatarUrl?: string): Promise<{ error: any }> {
       if (this.isGuest) return { error: "Visitantes não podem editar perfil" };
 
@@ -129,7 +148,6 @@ class SupabaseService {
       return { error };
   }
 
-  // Upload de Arquivo para o Storage
   async uploadFile(file: File, path: string): Promise<string | null> {
       if (this.isGuest) return null;
 
@@ -152,6 +170,80 @@ class SupabaseService {
       return data.publicUrl;
   }
 
+  // --- Reading Plans (Novas Tabelas: reading_plans, user_plans) ---
+
+  async fetchReadingPlans(): Promise<ReadingPlan[]> {
+    if (this.isGuest) return [];
+
+    const user = await this.getCurrentUser();
+    if (!user) return [];
+
+    // 1. Busca todos os planos
+    const { data: allPlans, error: plansError } = await this.client
+        .from('reading_plans')
+        .select('*');
+
+    if (plansError) {
+        console.error("Erro ao buscar planos:", plansError);
+        return [];
+    }
+
+    // 2. Busca progresso do usuário
+    const { data: userProgress, error: progressError } = await this.client
+        .from('user_plans')
+        .select('*')
+        .eq('user_id', user.id);
+
+    if (progressError) console.error("Erro ao buscar progresso:", progressError);
+
+    // 3. Combina os dados
+    const userProgressMap = new Map();
+    userProgress?.forEach((up: any) => userProgressMap.set(up.plan_id, up));
+
+    return allPlans.map((plan: any) => {
+        const progress = userProgressMap.get(plan.id);
+        return {
+            id: plan.id,
+            title: plan.title,
+            description: plan.description,
+            total_days: plan.total_days,
+            category: plan.category,
+            image_gradient: plan.image_gradient,
+            completed_days: progress ? progress.completed_days : 0,
+            is_active: progress ? progress.is_active : false
+        } as ReadingPlan;
+    });
+  }
+
+  async startPlan(planId: string): Promise<void> {
+    if (this.isGuest) return;
+    const user = await this.getCurrentUser();
+    if (!user) return;
+
+    // Tenta inserir, se já existir, faz update para active=true
+    const { error } = await this.client.from('user_plans').upsert({
+        user_id: user.id,
+        plan_id: planId,
+        is_active: true,
+        updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id, plan_id' });
+
+    if (error) console.error("Erro ao iniciar plano:", error);
+  }
+
+  async updatePlanProgress(planId: string, completedDays: number): Promise<void> {
+    if (this.isGuest) return;
+    const user = await this.getCurrentUser();
+    if (!user) return;
+
+    const { error } = await this.client.from('user_plans').update({
+        completed_days: completedDays,
+        updated_at: new Date().toISOString()
+    }).eq('user_id', user.id).eq('plan_id', planId);
+
+    if (error) console.error("Erro ao atualizar progresso:", error);
+  }
+
   // --- Prayers (Tabela: prayers) ---
 
   async fetchPrayers(): Promise<PrayerRequest[]> {
@@ -167,10 +259,7 @@ class SupabaseService {
         return [];
     }
     
-    if (!data || data.length === 0) {
-      return [];
-    }
-
+    if (!data || data.length === 0) return [];
     return data as PrayerRequest[];
   }
 
@@ -272,10 +361,7 @@ class SupabaseService {
       .eq('group_id', groupId)
       .order('created_at', { ascending: true });
 
-    if (error || !data) {
-        if (data && data.length === 0) return [];
-        return [];
-    }
+    if (error || !data) return [];
 
     const currentUser = await this.getCurrentUser();
 
@@ -291,14 +377,19 @@ class SupabaseService {
       reply_to_user: msg.reply_to_user,
       reply_to_text: msg.reply_to_text,
       reactions: msg.reactions || {},
-      user_avatar: msg.user_avatar, // Foto do usuário
-      image_url: msg.image_url      // Imagem do chat
+      user_avatar: msg.user_avatar, 
+      image_url: msg.image_url
     }));
   }
 
-  subscribeToGroupMessages(groupId: string, onNewMessage: (msg: ChatMessage) => void): RealtimeChannel {
-      return this.client
-          .channel(`public:messages:group_id=eq.${groupId}`)
+  subscribeToGroupMessages(
+      groupId: string, 
+      onNewMessage: (msg: ChatMessage) => void,
+      onTyping?: (user: { name: string, avatar?: string }) => void
+  ): RealtimeChannel {
+      const channel = this.client.channel(`public:messages:group_id=eq.${groupId}`);
+
+      channel
           .on(
               'postgres_changes',
               { event: 'INSERT', schema: 'public', table: 'messages', filter: `group_id=eq.${groupId}` },
@@ -323,7 +414,36 @@ class SupabaseService {
                   });
               }
           )
+          .on(
+              'broadcast', 
+              { event: 'typing' }, 
+              async ({ payload }) => {
+                  const currentUser = await this.getCurrentUser();
+                  // Ignora se for o próprio usuário
+                  if (payload.userId !== currentUser?.id && onTyping) {
+                      onTyping(payload);
+                  }
+              }
+          )
           .subscribe();
+
+      return channel;
+  }
+
+  async sendTypingEvent(channel: RealtimeChannel): Promise<void> {
+      if (this.isGuest) return;
+      const user = await this.getCurrentUser();
+      if (!user) return;
+
+      await channel.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { 
+              userId: user.id,
+              name: user.name, 
+              avatar: user.avatar_url 
+          }
+      });
   }
 
   unsubscribe(channel: RealtimeChannel) {
@@ -347,7 +467,7 @@ class SupabaseService {
       reply_to_id: replyTo?.id,
       reply_to_user: replyTo?.user,
       reply_to_text: replyTo?.text,
-      user_avatar: user.avatar_url, // Salva o avatar atual na mensagem
+      user_avatar: user.avatar_url,
       image_url: imageUrl
     };
 
@@ -379,13 +499,11 @@ class SupabaseService {
       const user = await this.getCurrentUser();
       if (!user || this.isGuest) return;
 
-      // 1. Fetch current reactions
       const { data: msg } = await this.client.from('messages').select('reactions').eq('id', messageId).single();
       if (!msg) return;
 
       const currentReactions = msg.reactions || {};
       
-      // Toggle reaction logic
       if (currentReactions[user.id] === reaction) {
           delete currentReactions[user.id];
       } else {

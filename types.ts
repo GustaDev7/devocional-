@@ -67,4 +67,28 @@ export interface ChatMessage {
   image_url?: string;   // Imagem enviada no chat
 }
 
-export type TabType = 'bible' | 'devotionals' | 'prayer' | 'routine';
+export interface ReadingPlan {
+  id: string;
+  title: string;
+  description: string;
+  total_days: number;
+  completed_days: number;
+  image_gradient: string;
+  category: 'bible' | 'thematic' | 'emotional';
+  is_active: boolean;
+}
+
+export interface PlanDay {
+  day: number;
+  readings: string; // ex: "Gênesis 1-3"
+}
+
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: string;
+  is_loading?: boolean;
+}
+
+export type TabType = 'bible' | 'devotionals' | 'prayer' | 'routine' | 'plans' | 'ai';
