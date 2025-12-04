@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Lumen</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap" rel="stylesheet">
@@ -49,9 +49,13 @@
     </script>
     <style>
       body {
-        background-color: #e2e8f0; /* Slate-200 for desktop background */
+        background-color: #f8fafc;
         color: #0f172a;
-        overscroll-behavior: none; /* Prevents pull-to-refresh effect on mobile */
+        overscroll-behavior: none;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
       }
       /* Hide scrollbar for clean UI */
       .no-scrollbar::-webkit-scrollbar {
@@ -64,6 +68,10 @@
       /* Smooth scrolling */
       html {
         scroll-behavior: smooth;
+        height: 100%;
+        width: 100%;
+      }
+      #root {
         height: 100%;
         width: 100%;
       }
@@ -82,5 +90,6 @@
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
