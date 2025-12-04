@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BookOpen, Heart, ListChecks, Users, LogOut, LucideIcon } from 'lucide-react';
+import { BookOpen, Heart, ListChecks, Users, LogOut, LucideIcon, Settings } from 'lucide-react';
 import { TabType, UserProfile } from '../types';
 
 interface NavigationProps {
@@ -8,9 +8,10 @@ interface NavigationProps {
   onTabChange: (tab: TabType) => void;
   user?: UserProfile | null;
   onLogout?: () => void;
+  onEditProfile?: () => void;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange, user, onLogout }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange, user, onLogout, onEditProfile }) => {
   const tabs: { id: TabType; label: string; Icon: LucideIcon }[] = [
     { id: 'bible', label: 'Bíblia', Icon: BookOpen },
     { id: 'devotionals', label: 'Grupos', Icon: Users },
@@ -98,13 +99,22 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange,
          {user && (
              <div className="pt-6 border-t border-slate-100 mt-4">
                  <div className="flex items-center gap-3 mb-4 px-2">
-                     <div className="w-10 h-10 rounded-full bg-navy-100 flex items-center justify-center text-navy-700 font-bold text-sm">
-                         {user.name?.charAt(0) || 'U'}
+                     <div className="w-10 h-10 rounded-full bg-navy-100 flex items-center justify-center text-navy-700 font-bold text-sm overflow-hidden border border-navy-200">
+                         {user.avatar_url ? (
+                             <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                         ) : (
+                             user.name?.charAt(0) || 'U'
+                         )}
                      </div>
                      <div className="flex-1 overflow-hidden">
                          <p className="text-sm font-bold text-navy-900 truncate">{user.name}</p>
                          <p className="text-xs text-slate-400 truncate">{user.email}</p>
                      </div>
+                     {onEditProfile && (
+                         <button onClick={onEditProfile} className="p-1.5 text-slate-400 hover:text-navy-900 hover:bg-slate-100 rounded-lg transition-colors">
+                             <Settings size={16} />
+                         </button>
+                     )}
                  </div>
                  {onLogout && (
                      <button 

@@ -1,3 +1,4 @@
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -58,6 +59,12 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   is_me?: boolean; // Helper for UI
+  reply_to_id?: string;
+  reply_to_user?: string;
+  reply_to_text?: string;
+  reactions?: Record<string, string>; // userId -> reactionType
+  user_avatar?: string; // Foto do usuário
+  image_url?: string;   // Imagem enviada no chat
 }
 
 export type TabType = 'bible' | 'devotionals' | 'prayer' | 'routine';

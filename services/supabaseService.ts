@@ -15,7 +15,7 @@ class SupabaseService {
     this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 
-  // --- Auth ---
+  // --- Auth & Profile ---
 
   async signInWithEmail(email: string, password: string): Promise<{ user: UserProfile | null, error: any }> {
     const { data, error } = await this.client.auth.signInWithPassword({
@@ -114,6 +114,44 @@ class SupabaseService {
     return null;
   }
 
+  // Atualiza Perfil (Nome e Foto)
+  async updateProfile(name: string, avatarUrl?: string): Promise<{ error: any }> {
+      if (this.isGuest) return { error: "Visitantes não podem editar perfil" };
+
+      const updates: any = {
+          data: { full_name: name }
+      };
+      if (avatarUrl) {
+          updates.data.avatar_url = avatarUrl;
+      }
+
+      const { error } = await this.client.auth.updateUser(updates);
+      return { error };
+  }
+
+  // Upload de Arquivo para o Storage
+  async uploadFile(file: File, path: string): Promise<string | null> {
+      if (this.isGuest) return null;
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${path}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await this.client.storage
+          .from('lumen-media')
+          .upload(fileName, file);
+
+      if (uploadError) {
+          console.error("Erro upload:", uploadError);
+          return null;
+      }
+
+      const { data } = this.client.storage
+          .from('lumen-media')
+          .getPublicUrl(fileName);
+
+      return data.publicUrl;
+  }
+
   // --- Prayers (Tabela: prayers) ---
 
   async fetchPrayers(): Promise<PrayerRequest[]> {
@@ -129,7 +167,6 @@ class SupabaseService {
         return [];
     }
     
-    // Se não tiver dados, retorna array vazio (não usa mocks para usuários logados)
     if (!data || data.length === 0) {
       return [];
     }
@@ -157,27 +194,15 @@ class SupabaseService {
       .select()
       .single();
 
-    if (error) {
-        throw error;
-    }
+    if (error) throw error;
     return data as PrayerRequest;
   }
 
   async incrementPrayerCount(prayerId: string): Promise<void> {
     if (this.isGuest) return;
-
-    // Primeiro busca o contador atual para garantir consistência
-    const { data: prayer } = await this.client
-        .from('prayers')
-        .select('prayed_count')
-        .eq('id', prayerId)
-        .single();
-
+    const { data: prayer } = await this.client.from('prayers').select('prayed_count').eq('id', prayerId).single();
     if (prayer) {
-        await this.client
-            .from('prayers')
-            .update({ prayed_count: prayer.prayed_count + 1 })
-            .eq('id', prayerId);
+        await this.client.from('prayers').update({ prayed_count: prayer.prayed_count + 1 }).eq('id', prayerId);
     }
   }
 
@@ -191,16 +216,12 @@ class SupabaseService {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-        return MOCK_GROUPS;
-    }
-
+    if (error || !data || data.length === 0) return [];
     return data as StudyGroup[];
   }
 
   async createGroup(name: string, description: string): Promise<StudyGroup> {
     if (this.isGuest) throw new Error("Visitantes não podem criar grupos.");
-    
     const user = await this.getCurrentUser();
 
     const { data, error } = await this.client
@@ -216,40 +237,26 @@ class SupabaseService {
 
     if (error) {
         console.warn("Using mock response for createGroup due to error (likely RLS):", error);
-        return {
-            id: 'mock-group-' + Date.now(),
-            name,
-            description,
-            members_count: 1,
-            image_url: undefined,
-            created_by: user?.id
-        };
+        return { id: 'mock-group-' + Date.now(), name, description, members_count: 1, image_url: undefined, created_by: user?.id };
     }
     return data as StudyGroup;
   }
 
   async updateGroup(groupId: string, name: string, description: string): Promise<StudyGroup> {
       if (this.isGuest) throw new Error("Visitantes não podem editar grupos.");
-
       const { data, error } = await this.client
           .from('study_groups')
           .update({ name, description })
           .eq('id', groupId)
           .select()
           .single();
-
       if (error) throw error;
       return data as StudyGroup;
   }
 
   async deleteGroup(groupId: string): Promise<void> {
       if (this.isGuest) throw new Error("Visitantes não podem excluir grupos.");
-
-      const { error } = await this.client
-          .from('study_groups')
-          .delete()
-          .eq('id', groupId);
-
+      const { error } = await this.client.from('study_groups').delete().eq('id', groupId);
       if (error) throw error;
   }
 
@@ -257,9 +264,7 @@ class SupabaseService {
   // --- Chat (Tabela: messages) ---
 
   async fetchMessages(groupId: string): Promise<ChatMessage[]> {
-    if (this.isGuest) {
-        return MOCK_MESSAGES.filter(m => m.group_id === groupId);
-    }
+    if (this.isGuest) return MOCK_MESSAGES.filter(m => m.group_id === groupId);
 
     const { data, error } = await this.client
       .from('messages')
@@ -268,9 +273,8 @@ class SupabaseService {
       .order('created_at', { ascending: true });
 
     if (error || !data) {
-        // Se a tabela estiver vazia, retorna vazio em vez de mock para evitar confusão no chat real
         if (data && data.length === 0) return [];
-        return MOCK_MESSAGES.filter(m => m.group_id === groupId);
+        return [];
     }
 
     const currentUser = await this.getCurrentUser();
@@ -282,11 +286,16 @@ class SupabaseService {
       user_name: msg.user_name,
       text: msg.text,
       timestamp: msg.created_at,
-      is_me: msg.user_id === currentUser?.id
+      is_me: msg.user_id === currentUser?.id,
+      reply_to_id: msg.reply_to_id,
+      reply_to_user: msg.reply_to_user,
+      reply_to_text: msg.reply_to_text,
+      reactions: msg.reactions || {},
+      user_avatar: msg.user_avatar, // Foto do usuário
+      image_url: msg.image_url      // Imagem do chat
     }));
   }
 
-  // Novo método para Realtime Subscription
   subscribeToGroupMessages(groupId: string, onNewMessage: (msg: ChatMessage) => void): RealtimeChannel {
       return this.client
           .channel(`public:messages:group_id=eq.${groupId}`)
@@ -304,7 +313,13 @@ class SupabaseService {
                       user_name: newMsg.user_name,
                       text: newMsg.text,
                       timestamp: newMsg.created_at,
-                      is_me: newMsg.user_id === currentUser?.id
+                      is_me: newMsg.user_id === currentUser?.id,
+                      reply_to_id: newMsg.reply_to_id,
+                      reply_to_user: newMsg.reply_to_user,
+                      reply_to_text: newMsg.reply_to_text,
+                      reactions: newMsg.reactions || {},
+                      user_avatar: newMsg.user_avatar,
+                      image_url: newMsg.image_url
                   });
               }
           )
@@ -315,7 +330,12 @@ class SupabaseService {
       this.client.removeChannel(channel);
   }
 
-  async sendMessage(groupId: string, text: string): Promise<ChatMessage> {
+  async sendMessage(
+      groupId: string, 
+      text: string, 
+      replyTo?: {id: string, user: string, text: string},
+      imageUrl?: string
+  ): Promise<ChatMessage> {
     const user = await this.getCurrentUser();
     if (!user || this.isGuest) throw new Error("Usuário não autenticado");
 
@@ -323,7 +343,12 @@ class SupabaseService {
       group_id: groupId,
       user_id: user.id,
       user_name: user.name || 'Usuário',
-      text: text
+      text: text,
+      reply_to_id: replyTo?.id,
+      reply_to_user: replyTo?.user,
+      reply_to_text: replyTo?.text,
+      user_avatar: user.avatar_url, // Salva o avatar atual na mensagem
+      image_url: imageUrl
     };
 
     const { data, error } = await this.client
@@ -344,13 +369,33 @@ class SupabaseService {
 
     return {
         id: data.id,
-        group_id: data.group_id,
-        user_id: data.user_id,
-        user_name: data.user_name,
-        text: data.text,
+        ...newMessage,
         timestamp: data.created_at,
         is_me: true
     };
+  }
+  
+  async reactToMessage(messageId: string, reaction: string): Promise<void> {
+      const user = await this.getCurrentUser();
+      if (!user || this.isGuest) return;
+
+      // 1. Fetch current reactions
+      const { data: msg } = await this.client.from('messages').select('reactions').eq('id', messageId).single();
+      if (!msg) return;
+
+      const currentReactions = msg.reactions || {};
+      
+      // Toggle reaction logic
+      if (currentReactions[user.id] === reaction) {
+          delete currentReactions[user.id];
+      } else {
+          currentReactions[user.id] = reaction;
+      }
+
+      await this.client
+        .from('messages')
+        .update({ reactions: currentReactions })
+        .eq('id', messageId);
   }
 
   // --- BIBLE & ROUTINE (Mantido igual) ---
@@ -368,9 +413,7 @@ class SupabaseService {
   async saveBibleNote(verseKey: string, content: string): Promise<void> {
     const user = await this.getCurrentUser();
     if (!user || this.isGuest) return;
-    await this.client.from('bible_notes').upsert({ 
-        user_id: user.id, verse_key: verseKey, note_content: content, updated_at: new Date().toISOString()
-    }, { onConflict: 'user_id, verse_key' } as any);
+    await this.client.from('bible_notes').upsert({ user_id: user.id, verse_key: verseKey, note_content: content, updated_at: new Date().toISOString() }, { onConflict: 'user_id, verse_key' } as any);
   }
 
   async deleteBibleNote(verseKey: string): Promise<void> {
@@ -421,9 +464,7 @@ class SupabaseService {
         } else {
             await this.client.from('user_habits').delete().eq('user_id', user.id).eq('habit_id', habitId).eq('completed_date', today);
         }
-      } catch (e) {
-        console.warn("Erro ao salvar hábito", e);
-      }
+      } catch (e) { console.warn("Erro ao salvar hábito", e); }
   }
 }
 

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './services/supabaseService';
 import { UserProfile, TabType } from './types';
 import { Navigation } from './components/Navigation';
@@ -7,7 +7,7 @@ import { BibleScreen } from './screens/BibleScreen';
 import { DevotionalScreen } from './screens/DevotionalScreen';
 import { PrayerScreen } from './screens/PrayerScreen';
 import { RoutineScreen } from './screens/RoutineScreen';
-import { Loader2, Mail, Lock, User, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Loader2, Mail, Lock, User, ArrowRight, AlertCircle, Sparkles, X, Camera } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -22,12 +22,19 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Profile Edit State
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     const checkSession = async () => {
       try {
         const currentUser = await supabase.getCurrentUser();
         setUser(currentUser);
+        if (currentUser?.name) setProfileName(currentUser.name);
       } catch (error) {
         console.error("Erro ao verificar sessão:", error);
       } finally {
@@ -48,9 +55,14 @@ const App: React.FC = () => {
         if (authMode === 'login') {
             const { user: loggedUser, error } = await supabase.signInWithEmail(email, password);
             if (error) {
-                setAuthError('Email ou senha inválidos. Tente novamente.');
+                if (error.message.includes("Email not confirmed")) {
+                    setAuthError("Email não confirmado. Verifique sua caixa de entrada.");
+                } else {
+                    setAuthError('Email ou senha inválidos. Tente novamente.');
+                }
             } else if (loggedUser) {
                 setUser(loggedUser);
+                setProfileName(loggedUser.name || '');
             }
         } else if (authMode === 'register') {
             if (!name.trim()) {
@@ -67,8 +79,8 @@ const App: React.FC = () => {
             if (error) {
                 setAuthError(error.message || 'Erro ao criar conta. Tente outro email.');
             } else if (newUser) {
-                // Se o Supabase retorna o usuário mas sem sessão ativa, provavelmente requer confirmação
                 setUser(newUser);
+                setProfileName(name);
                 if (!newUser.id) {
                     setAuthSuccess("Conta criada! Verifique seu email para confirmar.");
                 }
@@ -98,6 +110,7 @@ const App: React.FC = () => {
       setAuthLoading(true);
       const guestUser = await supabase.signInAsGuest();
       setUser(guestUser);
+      setProfileName(guestUser.name || 'Visitante');
       setAuthLoading(false);
   };
 
@@ -105,6 +118,33 @@ const App: React.FC = () => {
       await supabase.signOut();
       setUser(null);
       setCurrentTab('devotionals');
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!user) return;
+      setProfileLoading(true);
+
+      let newAvatarUrl = user.avatar_url;
+
+      // 1. Upload new avatar if selected
+      if (fileInputRef.current?.files?.[0]) {
+          const file = fileInputRef.current.files[0];
+          const uploadedUrl = await supabase.uploadFile(file, `avatars/${user.id}`);
+          if (uploadedUrl) newAvatarUrl = uploadedUrl;
+      }
+
+      // 2. Update Profile
+      const { error } = await supabase.updateProfile(profileName, newAvatarUrl);
+      
+      if (!error) {
+          // Atualiza estado local
+          setUser({ ...user, name: profileName, avatar_url: newAvatarUrl });
+          setIsProfileModalOpen(false);
+      } else {
+          alert("Erro ao atualizar perfil.");
+      }
+      setProfileLoading(false);
   };
 
   if (loading) {
@@ -147,7 +187,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] p-8 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] relative overflow-hidden ring-1 ring-white/20">
-                {/* Decorative top accent */}
                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-gold-300 via-gold-500 to-gold-300"></div>
 
                 <form onSubmit={handleEmailAuth} className="space-y-5 pt-2">
@@ -293,26 +332,91 @@ const App: React.FC = () => {
     );
   }
 
-  // Main App Layout (Responsive)
+  // Main App Layout
   return (
     <div className="h-[100dvh] w-full bg-slate-50 flex overflow-hidden">
-        {/* Navigation - Sidebar on Desktop (md+), Bottom Bar on Mobile */}
+        {/* Navigation */}
         <Navigation 
             currentTab={currentTab} 
             onTabChange={setCurrentTab}
             user={user}
             onLogout={handleLogout}
+            onEditProfile={() => setIsProfileModalOpen(true)}
         />
         
         {/* Main Content Area */}
         <main className="flex-1 h-full relative overflow-hidden flex flex-col">
             <div className="flex-1 h-full w-full overflow-hidden relative">
                 {currentTab === 'bible' && <BibleScreen />}
-                {currentTab === 'devotionals' && <DevotionalScreen />}
+                {currentTab === 'devotionals' && <DevotionalScreen user={user} />}
                 {currentTab === 'prayer' && <PrayerScreen />}
                 {currentTab === 'routine' && <RoutineScreen onLogout={handleLogout} />}
             </div>
         </main>
+
+        {/* PROFILE EDIT MODAL */}
+        {isProfileModalOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-navy-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-white/20">
+                    <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+                        <h3 className="text-navy-900 font-bold text-lg">Editar Perfil</h3>
+                        <button onClick={() => setIsProfileModalOpen(false)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-navy-900 flex items-center justify-center shadow-sm transition-colors"><X size={18} /></button>
+                    </div>
+                    <form onSubmit={handleProfileUpdate} className="p-8 flex flex-col items-center">
+                        <div className="relative group cursor-pointer mb-6" onClick={() => fileInputRef.current?.click()}>
+                             <div className="w-24 h-24 rounded-full border-4 border-slate-100 overflow-hidden shadow-inner group-hover:border-gold-300 transition-colors">
+                                 {user.avatar_url ? (
+                                     <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                                 ) : (
+                                     <div className="w-full h-full bg-navy-100 flex items-center justify-center text-navy-700 font-bold text-3xl">
+                                         {user.name?.charAt(0) || 'U'}
+                                     </div>
+                                 )}
+                             </div>
+                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <Camera className="text-white" size={24} />
+                             </div>
+                             <input 
+                                 type="file" 
+                                 ref={fileInputRef} 
+                                 className="hidden" 
+                                 accept="image/*"
+                                 onChange={(e) => {
+                                     // Preview logic could be added here
+                                     if(e.target.files?.[0]) {
+                                        // Force UI update for preview (simplified)
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => {
+                                            setUser({...user, avatar_url: ev.target?.result as string});
+                                        }
+                                        reader.readAsDataURL(e.target.files[0]);
+                                     }
+                                 }}
+                             />
+                        </div>
+
+                        <div className="w-full space-y-2 mb-6">
+                            <label className="block text-[11px] font-bold text-navy-900 uppercase tracking-widest">Seu Nome</label>
+                            <input 
+                                type="text" 
+                                value={profileName} 
+                                onChange={(e) => setProfileName(e.target.value)} 
+                                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm outline-none focus:ring-2 focus:ring-gold-200 focus:border-gold-400 font-medium text-center" 
+                                placeholder="Seu nome"
+                            />
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            disabled={profileLoading} 
+                            className="w-full bg-navy-900 hover:bg-navy-800 disabled:opacity-50 text-white font-bold py-3.5 rounded-2xl shadow-xl shadow-navy-900/10 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                        >
+                            {profileLoading ? <Loader2 size={20} className="animate-spin" /> : 'Salvar Alterações'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
     </div>
   );
 };
